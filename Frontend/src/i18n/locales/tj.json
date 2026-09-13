@@ -37,7 +37,10 @@
     "logout": "Хуруҷ",
     "employer": "Корбаҳишгир",
     "student": "Толоба",
-    "createJob": "Иҷоди вакансия"
+    "createJob": "Иҷоди вакансия",
+    "chat": "Чат",
+    "notifications": "Хабардиҳиҳо",
+    "settings": "Танзимот"
   },
   "theme": {
     "light": "Мавҷуди рушан",
@@ -74,7 +77,26 @@
     "passwordMinLength": "Рамз бояд кам 8 рамз бошад",
     "passwordMismatch": "Рамзҳо мӯвофиқ нест",
     "usernameRequired": "Номи корбар лозим аст",
-    "roleRequired": "Нақшро интихоб кунед"
+    "roleRequired": "Нақшро интихоб кунед",
+    "forgotPasswordTitle": "Барқарор кардани рамз",
+    "forgotPasswordDesc": "Email-ро барои гирифтани истиндо барқарорӣ ворид кунед",
+    "forgotPasswordSubmit": "Истиndo фиристодан",
+    "forgotPasswordSuccess": "Email фириста шуд",
+    "forgotPasswordSuccessDesc": "Агар аккаунт бо ин email мавҷуд бошад, шумо истиндои барқарории рамзро мегиред.",
+    "resetPasswordTitle": "Рамзи нав",
+    "resetPasswordDesc": "Рамзи нави худро ворид кунед",
+    "resetPasswordButton": "Рамзро тағйир диҳед",
+    "resetPasswordSuccess": "Рамз тағйир ёфт",
+    "resetPasswordSuccessDesc": "Шумо ҳоло бо рамзи нави худ воруд шуда метавонед.",
+    "backToLogin": "Бозгашт ба воруд",
+    "companyName": "Номи ширкат",
+    "companyNamePlaceholder": "Номи ширкати шумо",
+    "createAccount": "Аккаунт эҷод кунед",
+    "welcomeBack": "Хуш омадед",
+    "welcomeBackDesc": "Барои идома додани ҷустуҷӯи кор воруд шавед",
+    "orDivider": "ё",
+    "findWork": "Ҷустуҷӯи кор",
+    "findEmployees": "Ёфтани кормандон"
   },
   "profile": {
     "title": "Профил",
@@ -100,7 +122,11 @@
     "avatar": "Автар",
     "saveChanges": "Сабти тағйирот",
     "profileUpdated": "Профил навсозӣ шуд",
-    "profileError": "Хатогӣ дар навсозӣ кардани профил"
+    "profileError": "Хатогӣ дар навсозӣ кардани профил",
+    "createFirstResume": "Резюмеи аввалини худро эҷод кунед",
+    "createFirstResumeDesc": "Резюме ба корфармоён кӯмак мекунад, ки шуморо ёбанд. Ба таври дастӣ ё бо ИИ эҷод кунед.",
+    "generateWithAI": "Бо ИИ эҷод кунед",
+    "createManually": "Ба таври дастӣ эҷод кунед"
   },
   "jobs": {
     "title": "Вакансияҳо",

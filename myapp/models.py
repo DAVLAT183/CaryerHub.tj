@@ -33,6 +33,20 @@ class EmailVerification(models.Model):
         return f'{self.user.email} - {self.token}'
 
 
+class PasswordResetToken(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='password_reset_tokens')
+    token = models.UUIDField(default=uuid.uuid4, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_used = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name_plural = 'Токены сброса пароля'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.user.email} - {self.token}'
+
+
 class StudentProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='student_profile')
     university = models.CharField(max_length=200, blank=True)
@@ -233,7 +247,7 @@ class Favorite(models.Model):
 
 
 class ChatSession(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='chat_sessions')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='chat_sessions', null=True, blank=True)
     title = models.CharField(max_length=200, default='Новый чат')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

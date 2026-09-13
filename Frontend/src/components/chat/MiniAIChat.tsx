@@ -79,6 +79,12 @@ export default function MiniAIChat() {
     setInput('');
   };
 
+  const suggestedQuestions = [
+    'Как составить резюме?',
+    'Какие навыки нужны для Junior?',
+    'Как подготовиться к собеседованию?',
+  ];
+
   if (pathname === '/chat') return null;
 
   return (
@@ -141,10 +147,20 @@ export default function MiniAIChat() {
                   <Bot size={28} className="text-accent-primary hidden sm:block" />
                 </div>
                 <h3 className="font-heading font-semibold text-base sm:text-lg mb-2">Привет! Я AI-ассистент</h3>
-                <p className="text-xs sm:text-sm text-text-muted max-w-md">
+                <p className="text-xs sm:text-sm text-text-muted max-w-md mb-4">
                   Я помогу вам составить резюме, найти работу или подготовиться к собеседованию.
-                  Задайте вопрос или расскажите о себе!
                 </p>
+                <div className="flex flex-col gap-2 w-full max-w-xs">
+                  {suggestedQuestions.map((q, i) => (
+                    <button
+                      key={i}
+                      onClick={() => { setInput(q); }}
+                      className="text-xs text-left px-3 py-2 rounded-lg border border-border-default hover:border-accent-primary/30 hover:bg-accent-primary/5 text-text-muted hover:text-text-primary transition-all"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : (
               messages.map((msg, i) => (

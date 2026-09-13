@@ -446,6 +446,86 @@ def ai_create_resume(request):
     return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
+RESUME_CHAT_SYSTEM_PROMPT = """Ты — карьерный консультант, который помогает студенту составить резюме.
+
+Твоя задача: задавать пользователю вопросы по очереди, чтобы собрать информацию для резюме.
+
+ПРАВИЛА:
+1. Задавай ПО ОДНОМУ вопросу за раз. Не перегружай пользователя.
+2. Сначала спроси: "На какую должность вы претендуете?"
+3. Потом спроси: "Какие у вас навыки? (технологии, инструменты, языки программирования)"
+4. Потом: "Расскажите о вашем опыте — были ли стажировки, проекты, хакатоны?"
+5. Потом: "Какой график вам подходит? (гибкий, 2-4 часа, полная занятость)"
+6. Потом: "Какой формат работы предпочитаете? (онлайн, офлайн, гибрид)"
+7. Собрав достаточно информации — предоставь итоговый JSON.
+
+Формат итогового ответа (когда достаточно данных):
+Сгенерируй резюме в формате JSON:
+{
+  "title": "желаемая должность",
+  "about": "текст 'О себе' (3-5 предложений)",
+  "skills": ["навык1", "навык2", ...],
+  "schedule_type": "flexible" или "part_time" или "full_time",
+  "work_format": "online" или "offline" или "hybrid"
+}
+
+НОСИТЕЛЬЯ ДАННЫХ СТУДЕНТА (уже известны, НЕ спрашивай):
+- Университет, факультет, курс, город, имя
+
+Стиль общения: дружелюбный, профессиональный. Отвечай на языке пользователя.
+После получения JSON — скажи "Резюме готово! Нажмите кнопку 'Сохранить'." """
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def ai_resume_chat(request):
+    if request.user.role != 'student':
+        return Response({'detail': 'Только для студентов.'}, status=status.HTTP_403_FORBIDDEN)
+
+    message = request.data.get('message', '').strip()
+    history = request.data.get('history', [])
+
+    if not message:
+        return Response({'detail': 'Сообщение обязательно.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        profile = request.user.student_profile
+        student_context = f"\nДАННЫЕ СТУДЕНТА: {request.user.username}, {profile.university or ''}, {profile.faculty or ''}, {profile.course or ''} курс, {profile.city or ''}."
+    except StudentProfile.DoesNotExist:
+        student_context = ""
+
+    system_prompt = RESUME_CHAT_SYSTEM_PROMPT + student_context
+
+    from .ai_service import _chat_with_gemini
+
+    all_messages = history + [{'role': 'user', 'content': message}]
+    ai_response = _chat_with_gemini(all_messages, system_prompt)
+
+    if not ai_response:
+        ai_response = "Извините, произошла ошибка. Попробуйте ещё раз."
+
+    import json as _json
+    resume_data = None
+    try:
+        text = ai_response.strip()
+        if '```json' in text:
+            text = text.split('```json', 1)[1].rsplit('```', 1)[0].strip()
+        elif '```' in text:
+            text = text.split('```', 1)[1].rsplit('```', 1)[0].strip()
+        json_start = text.find('{')
+        json_end = text.rfind('}')
+        if json_start != -1 and json_end != -1:
+            text = text[json_start:json_end + 1]
+            resume_data = _json.loads(text)
+    except Exception:
+        pass
+
+    return Response({
+        'message': ai_response,
+        'resume_data': resume_data,
+    })
+
+
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def ai_recommend_jobs(request):
@@ -498,7 +578,7 @@ class ChatSessionViewSet(viewsets.ModelViewSet):
 
 
 @api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.AllowAny])
 def chat_send_message(request):
     session_id = request.data.get('session_id')
     message_content = request.data.get('message', '').strip()
@@ -506,23 +586,28 @@ def chat_send_message(request):
     if not message_content:
         return Response({'detail': 'Сообщение обязательно.'}, status=status.HTTP_400_BAD_REQUEST)
 
+    user = request.user if request.user.is_authenticated else None
+
     if session_id:
         try:
-            session = ChatSession.objects.get(id=session_id, user=request.user)
+            if user:
+                session = ChatSession.objects.get(id=session_id, user=user)
+            else:
+                session = ChatSession.objects.get(id=session_id, user__isnull=True)
         except ChatSession.DoesNotExist:
             return Response({'detail': 'Сессия не найдена.'}, status=status.HTTP_404_NOT_FOUND)
     else:
         title = message_content[:50] + ('...' if len(message_content) > 50 else '')
-        session = ChatSession.objects.create(user=request.user, title=title)
+        session = ChatSession.objects.create(user=user, title=title)
 
     ChatMessage.objects.create(session=session, role='user', content=message_content)
 
     messages = list(session.messages.order_by('created_at').values('role', 'content'))
 
     student_context = ""
-    if request.user.role == 'student':
+    if user and user.role == 'student':
         try:
-            profile = request.user.student_profile
+            profile = user.student_profile
             parts = []
             if profile.university:
                 parts.append(f"- Университет: {profile.university}")
@@ -562,7 +647,7 @@ def chat_send_message(request):
     all_messages = messages if messages else [{'role': 'user', 'content': message_content}]
     ai_response = _chat_with_gemini(all_messages, system_prompt)
     if not ai_response:
-        ai_response = _fallback_ai_response(message_content, request.user)
+        ai_response = _fallback_ai_response(message_content, user)
 
     ChatMessage.objects.create(session=session, role='assistant', content=ai_response)
 
@@ -742,6 +827,66 @@ def check_email_verification(request):
     })
 
 
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def password_reset_request(request):
+    email = request.data.get('email')
+    if not email:
+        return Response({'detail': 'Email обязателен.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        return Response({'detail': 'Если пользователь с таким email существует, письмо будет отправлено.'})
+
+    from .models import PasswordResetToken
+    reset_token = PasswordResetToken.objects.create(user=user)
+
+    frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+    reset_link = f"{frontend_url}/auth/reset-password?token={reset_token.token}"
+
+    try:
+        send_mail(
+            subject='Сброс пароля - CareerHub',
+            message=f'Для сброса пароля перейдите по ссылке: {reset_link}',
+            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@careerhub.com'),
+            recipient_list=[email],
+            fail_silently=False,
+        )
+        return Response({'detail': 'Если пользователь с таким email существует, письмо для сброса пароля отправлено.'})
+    except Exception as e:
+        return Response({'detail': f'Ошибка отправки письма: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def password_reset_confirm(request):
+    token = request.data.get('token')
+    new_password = request.data.get('new_password')
+
+    if not token or not new_password:
+        return Response({'detail': 'Токен и новый пароль обязательны.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    from .models import PasswordResetToken
+    try:
+        reset_token = PasswordResetToken.objects.get(token=token, is_used=False)
+    except PasswordResetToken.DoesNotExist:
+        return Response({'detail': 'Неверный или использованный токен.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    from datetime import timedelta
+    if timezone.now() - reset_token.created_at > timedelta(hours=24):
+        return Response({'detail': 'Ссылка истекла. Запросите новую.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    user = reset_token.user
+    user.set_password(new_password)
+    user.save()
+
+    reset_token.is_used = True
+    reset_token.save()
+
+    return Response({'detail': 'Пароль успешно изменён.'})
+
+
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def conversations_list(request):
@@ -827,6 +972,16 @@ def direct_messages(request, user_id):
                 'title': f'Новое сообщение от {request.user.username}',
                 'message': content[:200],
                 'data': {'link': f'/chat?user={sender_id}'},
+            }
+        )
+        room_name = f'{min(sender_id, other_user.id)}_{max(sender_id, other_user.id)}'
+        async_to_sync(channel_layer.group_send)(
+            f'chat_{room_name}',
+            {
+                'type': 'chat_message',
+                'message': content,
+                'sender_id': sender_id,
+                'sender_name': request.user.username,
             }
         )
     except Exception:
@@ -971,7 +1126,7 @@ def _build_classic(buffer, job):
     t = Table(rows, colWidths=[55*mm, 115*mm])
     t.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), ACCENT),
-        ('TEXTCOLOR', (0, 0), (-1, 0), white),
+        ('TEXTCOLOR', (0, 0), (-1, 0), white), 
         ('BACKGROUND', (0, 1), (-1, -1), BG),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [BG, white]),
         ('GRID', (0, 0), (-1, -1), 0.5, BORDER),

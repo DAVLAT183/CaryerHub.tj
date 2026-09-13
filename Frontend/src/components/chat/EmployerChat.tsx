@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { Send, User, Building2, ArrowLeft, MessageSquare } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Send, User as UserIcon, Building2, ArrowLeft, MessageSquare } from 'lucide-react';
 import api from '@/lib/api';
 import Button from '@/components/ui/Button';
 import { showToast, getErrorMessage } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
+import { useWebSocket } from '@/hooks/useWebSocket';
 
 interface User {
   id: number;
@@ -45,6 +46,29 @@ export default function EmployerChat({ initialUserId }: EmployerChatProps) {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const handleWsMessage = useCallback((data: Record<string, unknown>) => {
+    if (data.type === 'chat_message' && activeUser && data.sender_id === activeUser.id) {
+      const newMsg: DirectMessage = {
+        id: Date.now(),
+        sender: data.sender_id as number,
+        sender_name: data.sender_name as string,
+        recipient: user?.id || 0,
+        recipient_name: user?.username || '',
+        content: data.message as string,
+        created_at: new Date().toISOString(),
+        is_read: false,
+      };
+      setMessages((prev) => [...prev, newMsg]);
+    }
+  }, [activeUser, user]);
+
+  const roomName = activeUser && user ? [Math.min(user.id, activeUser.id), Math.max(user.id, activeUser.id)].join('_') : '';
+  const { isConnected } = useWebSocket({
+    path: `/ws/chat/${roomName}/`,
+    onMessage: handleWsMessage,
+    enabled: !!activeUser && !!user,
+  });
 
   const isStudent = user?.role === 'student';
   const otherRoleLabel = isStudent ? 'Работодатель' : 'Студент';
@@ -144,12 +168,12 @@ export default function EmployerChat({ initialUserId }: EmployerChatProps) {
               ) : isStudent ? (
                 <Building2 size={14} className="text-[var(--color-text-muted)] sm:hidden" />
               ) : (
-                <User size={14} className="text-[var(--color-text-muted)] sm:hidden" />
+                <UserIcon size={14} className="text-[var(--color-text-muted)] sm:hidden" />
               )}
               {activeUser.avatar ? null : isStudent ? (
                 <Building2 size={16} className="text-[var(--color-text-muted)] hidden sm:block" />
               ) : (
-                <User size={16} className="text-[var(--color-text-muted)] hidden sm:block" />
+                <UserIcon size={16} className="text-[var(--color-text-muted)] hidden sm:block" />
               )}
             </div>
             <div className="min-w-0">
@@ -242,7 +266,7 @@ export default function EmployerChat({ initialUserId }: EmployerChatProps) {
                   ) : isStudent ? (
                     <Building2 size={16} className="text-[var(--color-text-muted)]" />
                   ) : (
-                    <User size={16} className="text-[var(--color-text-muted)]" />
+                    <UserIcon size={16} className="text-[var(--color-text-muted)]" />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">

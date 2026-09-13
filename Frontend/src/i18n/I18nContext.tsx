@@ -1,6 +1,9 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import ru from './locales/ru.json';
+import en from './locales/en.json';
+import tj from './locales/tj.json';
 
 type Locale = 'ru' | 'en' | 'tj';
 
@@ -13,17 +16,10 @@ interface I18nContextType {
 const I18nContext = createContext<I18nContextType | undefined>(undefined);
 
 const translations: Record<Locale, Record<string, any>> = {
-  ru: {},
-  en: {},
-  tj: {},
+  ru,
+  en,
+  tj,
 };
-
-async function loadTranslations(locale: Locale) {
-  if (Object.keys(translations[locale]).length > 0) {
-    return translations[locale];
-  }
-  return translations[locale];
-}
 
 function getNestedValue(obj: any, path: string): any {
   return path.split('.').reduce((current, key) => current?.[key], obj);
@@ -45,7 +41,6 @@ export function I18nProvider({ children, defaultLocale = 'ru' }: { children: Rea
     if (loaded) {
       localStorage.setItem('locale', locale);
       document.documentElement.lang = locale;
-      loadTranslations(locale);
     }
   }, [locale, loaded]);
 
@@ -56,7 +51,6 @@ export function I18nProvider({ children, defaultLocale = 'ru' }: { children: Rea
   const t = (key: string, params?: Record<string, string | number>): string => {
     const translation = getNestedValue(translations[locale], key);
     if (!translation) {
-      console.warn(`Translation missing for key: ${key} in locale: ${locale}`);
       return key;
     }
     
@@ -69,10 +63,6 @@ export function I18nProvider({ children, defaultLocale = 'ru' }: { children: Rea
     
     return translation;
   };
-
-  if (!loaded) {
-    return <>{children}</>;
-  }
 
   return (
     <I18nContext.Provider value={{ locale, setLocale, t }}>

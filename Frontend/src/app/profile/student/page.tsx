@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { User, MapPin, GraduationCap, BookOpen, Calendar, Plus, Pencil, Trash2, Sparkles, Zap, Download } from 'lucide-react';
+import { User, MapPin, GraduationCap, BookOpen, Calendar, Plus, Pencil, Trash2, Sparkles, Zap, Download, FileText, ChevronRight, CheckCircle } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
 import Input from '@/components/ui/Input';
@@ -14,6 +14,7 @@ import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
 import Skeleton from '@/components/ui/Skeleton';
 import ResumeStyleSelector, { STYLE_OPTIONS } from '@/components/ui/ResumeStyleSelector';
+import ResumeGeneratorModal from '@/components/chat/ResumeGeneratorModal';
 import { formatSchedule, formatWorkFormat, formatResumeStyle, formatDate, showToast, getErrorMessage } from '@/lib/utils';
 import type { StudentProfile, Resume, ResumeStyle } from '@/types';
 
@@ -39,6 +40,7 @@ export default function StudentProfilePage() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResume, setAiResume] = useState<AIResume | null>(null);
   const [aiPreviewOpen, setAiPreviewOpen] = useState(false);
+  const [resumeGenOpen, setResumeGenOpen] = useState(false);
 
   const [profileForm, setProfileForm] = useState({
     university: '',
@@ -212,9 +214,79 @@ export default function StudentProfilePage() {
     );
   }
 
+  const profileSteps = [
+    { key: 'location', label: 'Место проживания', value: user?.location, icon: MapPin },
+    { key: 'university', label: 'Университет', value: profile?.university, icon: GraduationCap },
+    { key: 'faculty', label: 'Факультет', value: profile?.faculty, icon: BookOpen },
+    { key: 'course', label: 'Курс', value: profile?.course?.toString(), icon: Calendar },
+    { key: 'city', label: 'Город', value: profile?.city, icon: MapPin },
+  ];
+
+  const completedSteps = profileSteps.filter((s) => !!s.value).length;
+  const totalSteps = profileSteps.length;
+  const profileComplete = completedSteps === totalSteps;
+
   return (
     <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
       <h1 className="font-heading font-bold text-xl sm:text-[28px] text-text-primary tracking-tight mb-6 sm:mb-8">Мой профиль</h1>
+
+      {/* Profile Completion Prompt */}
+      {!profileComplete && (
+        <div className="mb-6 p-5 rounded-2xl bg-gradient-to-r from-accent-primary/5 via-accent-cyan/5 to-accent-primary/5 border border-accent-primary/20">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-accent-primary/10 flex items-center justify-center flex-shrink-0">
+              <FileText size={22} className="text-accent-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-heading font-semibold text-[15px] text-text-primary mb-1">Заполните профиль</h3>
+              <p className="text-[13px] text-text-muted mb-4">
+                Заполните все данные чтобы работодатели могли вас найти. Заполнено {completedSteps} из {totalSteps}.
+              </p>
+              <div className="flex flex-col gap-2.5">
+                {profileSteps.map((step) => (
+                  <div key={step.key} className="flex items-center gap-3">
+                    {step.value ? (
+                      <CheckCircle size={16} className="text-accent-primary flex-shrink-0" />
+                    ) : (
+                      <div className="w-4 h-4 rounded-full border-2 border-border-default flex-shrink-0" />
+                    )}
+                    <span className={`text-[13px] ${step.value ? 'text-text-primary' : 'text-text-muted'}`}>
+                      {step.label}
+                    </span>
+                    {step.value && (
+                      <span className="text-[12px] text-accent-primary font-medium ml-auto truncate max-w-[200px]">{step.value}</span>
+                    )}
+                    {!step.value && (
+                      <button
+                        onClick={() => setEditing(true)}
+                        className="text-[12px] text-accent-primary font-medium ml-auto hover:underline"
+                      >
+                        Заполнить
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 flex items-center gap-3">
+                <div className="flex-1 h-2 rounded-full bg-surface-hover overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-accent-primary transition-all duration-500"
+                    style={{ width: `${(completedSteps / totalSteps) * 100}%` }}
+                  />
+                </div>
+                <span className="text-[12px] font-semibold text-accent-primary">{Math.round((completedSteps / totalSteps) * 100)}%</span>
+              </div>
+              <button
+                onClick={() => setEditing(true)}
+                className="mt-4 flex items-center gap-2 px-4 py-2 rounded-xl bg-accent-primary text-white text-[13px] font-semibold hover:bg-accent-primary-hover transition-colors"
+              >
+                Заполнить профиль
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Sidebar */}
@@ -364,13 +436,12 @@ export default function StudentProfilePage() {
               <h3 className="font-heading font-semibold text-[14px] sm:text-[16px] text-text-primary">Резюме ({resumes.length})</h3>
               <div className="flex gap-1.5 sm:gap-2">
                 <button
-                  onClick={generateAIResume}
-                  disabled={aiLoading}
-                  className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[11px] sm:text-[13px] font-medium border border-border-default bg-surface-card text-text-secondary hover:bg-surface-hover transition-colors disabled:opacity-50"
+                  onClick={() => setResumeGenOpen(true)}
+                  className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[11px] sm:text-[13px] font-medium border border-accent-primary/30 bg-accent-primary/10 text-accent-primary hover:bg-accent-primary/15 transition-colors"
                 >
                   <Sparkles size={11} className="sm:hidden" />
                   <Sparkles size={13} className="hidden sm:block" />
-                  {aiLoading ? 'Генерация...' : 'ИИ'}
+                  ИИ (чат)
                 </button>
                 <button
                   onClick={() => { setEditingResume(null); setResumeModalOpen(true); }}
@@ -384,10 +455,30 @@ export default function StudentProfilePage() {
             </div>
 
             {resumes.length === 0 ? (
-              <div className="text-center py-10 rounded-xl bg-surface-hover border border-dashed border-border-default">
-                <Zap size={32} className="text-text-subtle mx-auto mb-3" />
-                <p className="text-[13px] text-text-muted mb-1">У вас пока нет резюме</p>
-                <p className="text-[12px] text-text-subtle">Нажмите "ИИ" чтобы сгенерировать автоматически</p>
+              <div className="text-center py-12 rounded-xl bg-gradient-to-br from-accent-primary/5 to-accent-cyan/5 border border-dashed border-accent-primary/30">
+                <div className="w-16 h-16 rounded-2xl bg-accent-primary/10 flex items-center justify-center mx-auto mb-4">
+                  <FileText size={28} className="text-accent-primary" />
+                </div>
+                <h4 className="font-heading font-semibold text-lg text-text-primary mb-2">Создайте своё первое резюме</h4>
+                <p className="text-[13px] text-text-muted mb-6 max-w-sm mx-auto">
+                  Резюме поможет работодателям найти вас. Создайте вручную или воспользуйтесь ИИ-генерацией.
+                </p>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                  <button
+                    onClick={() => setResumeGenOpen(true)}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-semibold border border-accent-primary/30 bg-accent-primary/10 text-accent-primary hover:bg-accent-primary/15 transition-colors"
+                  >
+                    <Sparkles size={15} />
+                    Создать с ИИ (чат)
+                  </button>
+                  <button
+                    onClick={() => { setEditingResume(null); setResumeModalOpen(true); }}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-semibold bg-accent-primary text-white hover:bg-accent-primary-hover transition-colors"
+                  >
+                    <Plus size={15} />
+                    Создать вручную
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="space-y-3">
@@ -426,13 +517,14 @@ export default function StudentProfilePage() {
                          )}
                       </div>
                     </div>
-                    <div className="flex gap-1">
+                    <div className="flex items-center gap-2">
                       <button
                         onClick={() => downloadResumePDF(resume.id)}
-                        className="p-2 text-text-muted hover:text-accent-primary hover:bg-accent-primary/10 rounded-lg transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold text-white bg-accent-primary hover:bg-accent-primary-hover transition-colors"
                         title="Скачать PDF"
                       >
-                        <Download size={14} />
+                        <Download size={13} />
+                        PDF
                       </button>
                       <button
                         onClick={() => {
@@ -451,12 +543,14 @@ export default function StudentProfilePage() {
                           setResumeModalOpen(true);
                         }}
                         className="p-2 text-text-muted hover:text-text-primary hover:bg-surface-active rounded-lg transition-colors"
+                        title="Редактировать"
                       >
                         <Pencil size={14} />
                       </button>
                       <button
                         onClick={() => deleteResume(resume.id)}
                         className="p-2 text-text-muted hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                        title="Удалить"
                       >
                         <Trash2 size={14} />
                       </button>
@@ -592,6 +686,17 @@ export default function StudentProfilePage() {
           </Button>
         </div>
       </Modal>
+      {/* Resume Generator Chat Modal */}
+      <ResumeGeneratorModal
+        open={resumeGenOpen}
+        onClose={() => setResumeGenOpen(false)}
+        onCreated={() => {
+          api.get('/resumes/').then((r) => {
+            const data = r.data;
+            setResumes(data.results || data);
+          }).catch(() => {});
+        }}
+      />
     </div>
   );
 }

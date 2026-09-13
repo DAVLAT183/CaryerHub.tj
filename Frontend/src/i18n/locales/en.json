@@ -37,7 +37,10 @@
     "logout": "Logout",
     "employer": "Employer",
     "student": "Student",
-    "createJob": "Create Job"
+    "createJob": "Create Job",
+    "chat": "Chat",
+    "notifications": "Notifications",
+    "settings": "Settings"
   },
   "theme": {
     "light": "Light Theme",
@@ -74,7 +77,26 @@
     "passwordMinLength": "Password must be at least 8 characters",
     "passwordMismatch": "Passwords do not match",
     "usernameRequired": "Username is required",
-    "roleRequired": "Select a role"
+    "roleRequired": "Select a role",
+    "forgotPasswordTitle": "Reset Password",
+    "forgotPasswordDesc": "Enter email to receive reset link",
+    "forgotPasswordSubmit": "Send Link",
+    "forgotPasswordSuccess": "Email Sent",
+    "forgotPasswordSuccessDesc": "If an account with this email exists, you will receive a password reset link.",
+    "resetPasswordTitle": "New Password",
+    "resetPasswordDesc": "Enter your new password",
+    "resetPasswordButton": "Change Password",
+    "resetPasswordSuccess": "Password Changed",
+    "resetPasswordSuccessDesc": "You can now login with your new password.",
+    "backToLogin": "Back to Login",
+    "companyName": "Company Name",
+    "companyNamePlaceholder": "Your company name",
+    "createAccount": "Create Account",
+    "welcomeBack": "Welcome Back",
+    "welcomeBackDesc": "Login to continue your job search",
+    "orDivider": "or",
+    "findWork": "Looking for work",
+    "findEmployees": "Find employees"
   },
   "profile": {
     "title": "Profile",
@@ -100,7 +122,11 @@
     "avatar": "Avatar",
     "saveChanges": "Save Changes",
     "profileUpdated": "Profile Updated",
-    "profileError": "Profile Update Error"
+    "profileError": "Profile Update Error",
+    "createFirstResume": "Create Your First Resume",
+    "createFirstResumeDesc": "A resume helps employers find you. Create manually or use AI generation.",
+    "generateWithAI": "Generate with AI",
+    "createManually": "Create Manually"
   },
   "jobs": {
     "title": "Jobs",

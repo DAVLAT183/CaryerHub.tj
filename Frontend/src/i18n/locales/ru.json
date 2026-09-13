@@ -37,7 +37,10 @@
     "logout": "Выйти",
     "employer": "Работодатель",
     "student": "Соискатель",
-    "createJob": "Создать вакансию"
+    "createJob": "Создать вакансию",
+    "chat": "Чат",
+    "notifications": "Уведомления",
+    "settings": "Настройки"
   },
   "theme": {
     "light": "Светлая тема",
@@ -74,7 +77,26 @@
     "passwordMinLength": "Пароль должен содержать минимум 8 символов",
     "passwordMismatch": "Пароли не совпадают",
     "usernameRequired": "Имя пользователя обязательно",
-    "roleRequired": "Выберите роль"
+    "roleRequired": "Выберите роль",
+    "forgotPasswordTitle": "Сброс пароля",
+    "forgotPasswordDesc": "Введите email для получения ссылки сброса",
+    "forgotPasswordSubmit": "Отправить ссылку",
+    "forgotPasswordSuccess": "Письмо отправлено",
+    "forgotPasswordSuccessDesc": "Если аккаунт с таким email существует, вы получите письмо со ссылкой для сброса пароля.",
+    "resetPasswordTitle": "Новый пароль",
+    "resetPasswordDesc": "Введите новый пароль",
+    "resetPasswordButton": "Изменить пароль",
+    "resetPasswordSuccess": "Пароль изменён",
+    "resetPasswordSuccessDesc": "Теперь вы можете войти с новым паролем.",
+    "backToLogin": "Вернуться к входу",
+    "companyName": "Название компании",
+    "companyNamePlaceholder": "Название вашей компании",
+    "createAccount": "Создать аккаунт",
+    "welcomeBack": "Добро пожаловать",
+    "welcomeBackDesc": "Войдите, чтобы продолжить поиск работы",
+    "orDivider": "или",
+    "findWork": "Ищу работу",
+    "findEmployees": "Найти сотрудников"
   },
   "profile": {
     "title": "Профиль",
@@ -100,7 +122,11 @@
     "avatar": "Аватар",
     "saveChanges": "Сохранить изменения",
     "profileUpdated": "Профиль обновлен",
-    "profileError": "Ошибка обновления профиля"
+    "profileError": "Ошибка обновления профиля",
+    "createFirstResume": "Создайте своё первое резюме",
+    "createFirstResumeDesc": "Резюме поможет работодателям найти вас. Создайте вручную или воспользуйтесь ИИ-генерацией.",
+    "generateWithAI": "Сгенерировать с ИИ",
+    "createManually": "Создать вручную"
   },
   "jobs": {
     "title": "Вакансии",

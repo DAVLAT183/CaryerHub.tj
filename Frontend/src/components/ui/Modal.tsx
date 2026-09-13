@@ -42,7 +42,7 @@ export default function Modal({ open, onClose, title, children, className }: Mod
       <div
         className={clsx(
           'relative z-10 bg-surface-card rounded-2xl p-8 border border-border-default shadow-[0_10px_35px_rgba(20,30,40,0.10)]',
-          'w-full max-w-lg mx-4 animate-fade-in',
+          'w-full max-w-lg mx-4 animate-fade-in max-h-[90vh] overflow-y-auto',
           className
         )}
       >
