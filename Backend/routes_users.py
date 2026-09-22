@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import List, Optional
+import re as _re
 from database import get_db
 from models import (
     User,
@@ -23,13 +24,17 @@ from schemas import (
     EmployerProfileCreate,
     CategoryResponse,
     CategoryCreate,
-    WorkScheduleResponse,
-    WorkFormatResponse,
-    WorkExperienceResponse,
 )
 from auth import get_current_user
 
-router = APIRouter(prefix="/profiles", tags=["Profiles"])
+
+def _slugify(text: str) -> str:
+    text = text.lower().strip()
+    text = _re.sub(r'[^\w\s-]', '', text)
+    text = _re.sub(r'[\s_]+', '-', text)
+    return text.strip('-')
+
+router = APIRouter(tags=["Profiles"])
 
 
 @router.get("/users/", response_model=List[UserResponse])
@@ -340,18 +345,18 @@ async def delete_category(
     await db.commit()
 
 
-@router.get("/work-schedules/", response_model=List[WorkScheduleResponse])
+@router.get("/work-schedules/")
 async def list_work_schedules(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(WorkSchedule))
-    return result.scalars().all()
+    items = result.scalars().all()
+    return [{"id": w.id, "name": w.name, "slug": w.slug} for w in items]
 
 
 @router.post(
     "/work-schedules/",
-    response_model=WorkScheduleResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_work_schedule(
@@ -361,14 +366,15 @@ async def create_work_schedule(
 ):
     if not current_user.is_staff:
         raise HTTPException(status_code=403, detail="Admin only")
-    ws = WorkSchedule(name=name)
+    slug = _slugify(name)
+    ws = WorkSchedule(name=name, slug=slug)
     db.add(ws)
     await db.commit()
     await db.refresh(ws)
-    return ws
+    return {"id": ws.id, "name": ws.name, "slug": ws.slug}
 
 
-@router.put("/work-schedules/{ws_id}", response_model=WorkScheduleResponse)
+@router.put("/work-schedules/{ws_id}")
 async def update_work_schedule(
     ws_id: int,
     name: str = Query(...),
@@ -382,9 +388,10 @@ async def update_work_schedule(
     if not ws:
         raise HTTPException(status_code=404, detail="Work schedule not found")
     ws.name = name
+    ws.slug = _slugify(name)
     await db.commit()
     await db.refresh(ws)
-    return ws
+    return {"id": ws.id, "name": ws.name, "slug": ws.slug}
 
 
 @router.delete("/work-schedules/{ws_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -403,18 +410,18 @@ async def delete_work_schedule(
     await db.commit()
 
 
-@router.get("/work-formats/", response_model=List[WorkFormatResponse])
+@router.get("/work-formats/")
 async def list_work_formats(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(WorkFormat))
-    return result.scalars().all()
+    items = result.scalars().all()
+    return [{"id": w.id, "name": w.name, "slug": w.slug} for w in items]
 
 
 @router.post(
     "/work-formats/",
-    response_model=WorkFormatResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_work_format(
@@ -424,14 +431,15 @@ async def create_work_format(
 ):
     if not current_user.is_staff:
         raise HTTPException(status_code=403, detail="Admin only")
-    wf = WorkFormat(name=name)
+    slug = _slugify(name)
+    wf = WorkFormat(name=name, slug=slug)
     db.add(wf)
     await db.commit()
     await db.refresh(wf)
-    return wf
+    return {"id": wf.id, "name": wf.name, "slug": wf.slug}
 
 
-@router.put("/work-formats/{wf_id}", response_model=WorkFormatResponse)
+@router.put("/work-formats/{wf_id}")
 async def update_work_format(
     wf_id: int,
     name: str = Query(...),
@@ -445,9 +453,10 @@ async def update_work_format(
     if not wf:
         raise HTTPException(status_code=404, detail="Work format not found")
     wf.name = name
+    wf.slug = _slugify(name)
     await db.commit()
     await db.refresh(wf)
-    return wf
+    return {"id": wf.id, "name": wf.name, "slug": wf.slug}
 
 
 @router.delete("/work-formats/{wf_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -466,18 +475,18 @@ async def delete_work_format(
     await db.commit()
 
 
-@router.get("/work-experiences/", response_model=List[WorkExperienceResponse])
+@router.get("/work-experiences/")
 async def list_work_experiences(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(WorkExperience))
-    return result.scalars().all()
+    items = result.scalars().all()
+    return [{"id": w.id, "name": w.name, "slug": w.slug} for w in items]
 
 
 @router.post(
     "/work-experiences/",
-    response_model=WorkExperienceResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_work_experience(
@@ -487,14 +496,15 @@ async def create_work_experience(
 ):
     if not current_user.is_staff:
         raise HTTPException(status_code=403, detail="Admin only")
-    we = WorkExperience(name=name)
+    slug = _slugify(name)
+    we = WorkExperience(name=name, slug=slug)
     db.add(we)
     await db.commit()
     await db.refresh(we)
-    return we
+    return {"id": we.id, "name": we.name, "slug": we.slug}
 
 
-@router.put("/work-experiences/{we_id}", response_model=WorkExperienceResponse)
+@router.put("/work-experiences/{we_id}")
 async def update_work_experience(
     we_id: int,
     name: str = Query(...),
@@ -508,9 +518,10 @@ async def update_work_experience(
     if not we:
         raise HTTPException(status_code=404, detail="Work experience not found")
     we.name = name
+    we.slug = _slugify(name)
     await db.commit()
     await db.refresh(we)
-    return we
+    return {"id": we.id, "name": we.name, "slug": we.slug}
 
 
 @router.delete("/work-experiences/{we_id}", status_code=status.HTTP_204_NO_CONTENT)

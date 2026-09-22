@@ -1,10 +1,13 @@
 import os
+import requests as http_requests
 from django.conf import settings
 from django.core.mail import send_mail
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
-from django.http import FileResponse, HttpResponse
+from django.http import FileResponse, HttpResponse, HttpResponseRedirect
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 from rest_framework import viewsets, status, permissions, generics
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
@@ -15,7 +18,8 @@ from .models import (
     StudentProfile, EmployerProfile,
     Category, Resume, Job, Application, Favorite,
     ChatSession, ChatMessage, EmailVerification, DirectMessage,
-    WorkSchedule, WorkFormat, WorkExperience, Notification
+    WorkSchedule, WorkFormat, WorkExperience, Notification,
+    TariffPlan, UserSubscription, Payment
 )
 from .serializers import (
     UserSerializer, UserRegisterSerializer,
@@ -29,10 +33,15 @@ from .serializers import (
     DirectMessageSerializer,
     WorkScheduleSerializer, WorkFormatSerializer, WorkExperienceSerializer,
     NotificationSerializer,
+    TariffPlanSerializer, UserSubscriptionSerializer, PaymentSerializer, CreatePaymentSerializer,
 )
 from .permissions import IsOwnerOrReadOnly, IsEmployer, IsStudent, IsAdminRole
 
 User = get_user_model()
+
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
+GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
+GOOGLE_REDIRECT_URI = os.environ.get('GOOGLE_REDIRECT_URI', 'http://localhost:8000/api/auth/google/callback/')
 
 
 class RegisterView(generics.CreateAPIView):
@@ -1866,3 +1875,309 @@ def calculate_route(request):
 
     except Exception as e:
         return Response({'detail': f'Ошибка при построении маршрута: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class TariffPlanViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = TariffPlan.objects.filter(is_active=True)
+    serializer_class = TariffPlanSerializer
+    permission_classes = [permissions.AllowAny]
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def create_payment(request):
+    serializer = CreatePaymentSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    plan = TariffPlan.objects.get(id=serializer.validated_data['plan_id'])
+
+    subscription = UserSubscription.objects.create(
+        user=request.user,
+        plan=plan,
+        status='pending',
+    )
+
+    from .payment_service import payment_service
+    result = payment_service.create_invoice(
+        user=request.user,
+        amount=plan.price,
+        description=f'Подписка {plan.display_name} - CareerHub',
+        subscription_id=subscription.id,
+    )
+
+    if not result['success']:
+        subscription.delete()
+        return Response(
+            {'detail': f'Ошибка создания платежа: {result.get("error", "Неизвестная ошибка")}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    Payment.objects.create(
+        user=request.user,
+        subscription=subscription,
+        invoice_no=result['invoice_no'],
+        amount=plan.price,
+        status='pending',
+    )
+
+    return Response({
+        'invoice_no': result['invoice_no'],
+        'redirect_url': result['redirect_url'],
+        'subscription_id': subscription.id,
+    })
+
+
+@csrf_exempt
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def payment_webhook(request):
+    data = request.data
+
+    from .payment_service import payment_service
+    if not payment_service.verify_webhook_signature(data):
+        return Response({'detail': 'Invalid signature'}, status=status.HTTP_403_FORBIDDEN)
+
+    invoice_no = data.get('InvoiceNo')
+    express_status = data.get('Status')
+
+    if not invoice_no:
+        return Response({'detail': 'InvoiceNo required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        payment = Payment.objects.select_related('subscription', 'subscription__plan', 'user').get(invoice_no=invoice_no)
+    except Payment.DoesNotExist:
+        return Response({'detail': 'Payment not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if payment.status == 'paid':
+        return Response({'detail': 'Already processed'})
+
+    status_map = {
+        1: 'pending',
+        2: 'failed',
+        3: 'paid',
+        4: 'paid',
+        5: 'cancelled',
+        6: 'paid',
+        7: 'cancelled',
+    }
+
+    new_status = status_map.get(express_status, 'failed')
+    payment.status = new_status
+    payment.payment_method = data.get('PaymentMethod', '')
+
+    if new_status == 'paid':
+        from django.utils import timezone
+        from datetime import timedelta
+
+        payment.paid_at = timezone.now()
+        payment.save()
+
+        subscription = payment.subscription
+        subscription.status = 'active'
+        subscription.started_at = timezone.now()
+        subscription.expires_at = timezone.now() + timedelta(days=subscription.plan.duration_days)
+        subscription.save()
+
+        payment.user.current_plan = subscription.plan.name
+        payment.user.save()
+
+        Notification.objects.create(
+            user=payment.user,
+            notification_type='system',
+            title='Подписка активирована!',
+            message=f'Ваш тариф "{subscription.plan.display_name}" успешно активирован до {subscription.expires_at.strftime("%d.%m.%Y")}.',
+            link='/settings/billing',
+        )
+
+        try:
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                f'user_{payment.user.id}',
+                {
+                    'type': 'send_notification',
+                    'notification_type': 'system',
+                    'title': 'Подписка активирована!',
+                    'message': f'Ваш тариф "{subscription.plan.display_name}" активирован.',
+                    'data': {'link': '/settings/billing'},
+                }
+            )
+        except Exception:
+            pass
+    else:
+        payment.save()
+        if new_status in ('failed', 'cancelled'):
+            payment.subscription.status = new_status
+            payment.subscription.save()
+
+    return Response({'detail': 'OK'})
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def my_subscription(request):
+    subscription = request.user.get_subscription()
+    if subscription:
+        serializer = UserSubscriptionSerializer(subscription)
+        return Response(serializer.data)
+    return Response({'detail': 'Нет активной подписки.', 'current_plan': request.user.current_plan})
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def payment_history(request):
+    payments = Payment.objects.filter(user=request.user)
+    serializer = PaymentSerializer(payments, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def check_plan_access(request):
+    plan = request.user.current_plan
+    features = {
+        'current_plan': plan,
+        'unlimited_jobs': plan in ('professional', 'corporate'),
+        'advanced_search': plan in ('professional', 'corporate'),
+        'priority_listing': plan in ('professional', 'corporate'),
+        'analytics': plan in ('professional', 'corporate'),
+        'highlighting': plan in ('professional', 'corporate'),
+        'priority_support': plan in ('professional', 'corporate'),
+        'api_access': plan == 'corporate',
+        'personal_manager': plan == 'corporate',
+        'custom_branding': plan == 'corporate',
+        'hr_integration': plan == 'corporate',
+    }
+
+    subscription = request.user.get_subscription()
+    if subscription:
+        features['expires_at'] = subscription.expires_at
+        features['plan_name'] = subscription.plan.display_name
+
+    return Response(features)
+
+
+@csrf_exempt
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def google_auth_redirect(request):
+    import secrets
+    from urllib.parse import urlencode
+
+    state = secrets.token_urlsafe(32)
+    request.session['google_oauth_state'] = state
+
+    params = {
+        'client_id': GOOGLE_CLIENT_ID,
+        'redirect_uri': GOOGLE_REDIRECT_URI,
+        'response_type': 'code',
+        'scope': 'openid email profile',
+        'access_type': 'offline',
+        'prompt': 'consent',
+        'state': state,
+    }
+    google_url = 'https://accounts.google.com/o/oauth2/v2/auth?' + urlencode(params)
+    return HttpResponseRedirect(google_url)
+
+
+@csrf_exempt
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def google_auth_callback(request):
+    import uuid as uuid_mod
+    code = request.query_params.get('code')
+    state = request.query_params.get('state')
+    error = request.query_params.get('error')
+
+    frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+
+    if error:
+        return HttpResponseRedirect(f'{frontend_url}/auth/login?error=google_denied')
+
+    if not code:
+        return HttpResponseRedirect(f'{frontend_url}/auth/login?error=no_code')
+
+    expected_state = request.session.get('google_oauth_state')
+    if not expected_state or not state or state != expected_state:
+        return HttpResponseRedirect(f'{frontend_url}/auth/login?error=invalid_state')
+
+    del request.session['google_oauth_state']
+
+    token_data = {
+        'code': code,
+        'client_id': GOOGLE_CLIENT_ID,
+        'client_secret': GOOGLE_CLIENT_SECRET,
+        'redirect_uri': GOOGLE_REDIRECT_URI,
+        'grant_type': 'authorization_code',
+    }
+
+    try:
+        token_response = http_requests.post('https://oauth2.googleapis.com/token', data=token_data, timeout=10)
+        token_json = token_response.json()
+
+        if 'access_token' not in token_json:
+            return HttpResponseRedirect(f'{frontend_url}/auth/login?error=token_exchange_failed')
+
+        access_token = token_json['access_token']
+
+        userinfo_response = http_requests.get(
+            'https://www.googleapis.com/oauth2/v2/userinfo',
+            headers={'Authorization': f'Bearer {access_token}'},
+            timeout=10,
+        )
+        userinfo = userinfo_response.json()
+
+        email = userinfo.get('email')
+        name = userinfo.get('name', '')
+        avatar_url = userinfo.get('picture', '')
+
+        if not email:
+            return HttpResponseRedirect(f'{frontend_url}/auth/login?error=no_email')
+
+        user = None
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            username = email.split('@')[0]
+            base_username = username
+            counter = 1
+            while User.objects.filter(username=username).exists():
+                username = f'{base_username}{counter}'
+                counter += 1
+
+            random_password = uuid_mod.uuid4().hex
+            user = User.objects.create_user(
+                username=username,
+                email=email,
+                password=random_password,
+                first_name=name.split(' ')[0] if name else '',
+                last_name=' '.join(name.split(' ')[1:]) if name and ' ' in name else '',
+                role='student',
+                is_email_verified=True,
+            )
+
+            if avatar_url:
+                try:
+                    avatar_response = http_requests.get(avatar_url, timeout=10)
+                    if avatar_response.status_code == 200:
+                        from django.core.files.base import ContentFile
+                        ext = 'jpg'
+                        user.avatar.save(f'avatars/{uuid_mod.uuid4()}.{ext}', ContentFile(avatar_response.content), save=True)
+                except Exception:
+                    pass
+
+        from rest_framework_simplejwt.tokens import RefreshToken
+        refresh = RefreshToken.for_user(user)
+
+        redirect_url = (
+            f'{frontend_url}/auth/callback'
+            f'?access={str(refresh.access_token)}'
+            f'&refresh={str(refresh)}'
+        )
+        return HttpResponseRedirect(redirect_url)
+
+    except http_requests.exceptions.RequestException:
+        return HttpResponseRedirect(f'{frontend_url}/auth/login?error=google_api_error')
+    except Exception:
+        return HttpResponseRedirect(f'{frontend_url}/auth/login?error=server_error')

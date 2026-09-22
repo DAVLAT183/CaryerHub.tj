@@ -301,7 +301,7 @@ def _chat_with_gemini(messages, system_prompt):
 
 
 def find_matching_jobs(student_profile, resumes=None):
-    from myapp.models import Job, Resume
+    from DRF.myapp.models import Job, Resume
 
     profile_data, category_keywords = _build_user_profile(student_profile)
     existing_skills = set()

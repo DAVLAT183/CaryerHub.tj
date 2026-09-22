@@ -423,3 +423,192 @@ class PaymentSchema(BaseModel):
 
 class CreatePaymentSchema(BaseModel):
     plan_id: int
+
+
+# ──────────────────────────── User Update ────────────────────────────
+
+
+class UserUpdateRequest(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    phone: Optional[str] = None
+    avatar: Optional[str] = None
+    location: Optional[str] = None
+
+
+# ──────────────────────────── Profile Create/Update ────────────────────────────
+
+
+class StudentProfileCreate(BaseModel):
+    university: Optional[str] = None
+    faculty: Optional[str] = None
+    course: Optional[int] = None
+    birth_date: Optional[str] = None
+    age: Optional[int] = None
+    city: Optional[str] = None
+
+
+class StudentProfileResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
+    university: Optional[str] = None
+    faculty: Optional[str] = None
+    course: Optional[int] = None
+    birth_date: Optional[str] = None
+    age: Optional[int] = None
+    city: Optional[str] = None
+
+
+class EmployerProfileCreate(BaseModel):
+    company_name: str
+    description: Optional[str] = None
+    website: Optional[str] = None
+    address: Optional[str] = None
+
+
+class EmployerProfileResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
+    company_name: str
+    description: Optional[str] = None
+    website: Optional[str] = None
+    address: Optional[str] = None
+    is_verified: bool = False
+
+
+# ──────────────────────────── Category ────────────────────────────
+
+
+class CategoryCreate(BaseModel):
+    name: str
+    slug: str
+
+
+class CategoryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    slug: str
+
+
+# ──────────────────────────── Work Lookups ────────────────────────────
+
+
+class WorkScheduleResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+
+
+class WorkFormatResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+
+
+class WorkExperienceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+
+
+# ──────────────────────────── Favorite ────────────────────────────
+
+
+class FavoriteCreate(BaseModel):
+    job_id: int
+
+
+class FavoriteResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    student_id: Optional[int] = None
+    job_id: Optional[int] = None
+    job_title: Optional[str] = None
+    company_name: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+
+# ──────────────────────────── Notification ────────────────────────────
+
+
+class NotificationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    notification_type: Optional[str] = None
+    title: str
+    message: Optional[str] = None
+    link: Optional[str] = None
+    is_read: bool = False
+    created_at: Optional[datetime] = None
+
+
+# ──────────────────────────── Chat ────────────────────────────
+
+
+class ChatSessionCreate(BaseModel):
+    title: Optional[str] = None
+
+
+class ChatMessageCreate(BaseModel):
+    session_id: Optional[int] = None
+    content: str
+
+
+class ChatMessageResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    session_id: Optional[int] = None
+    role: str
+    content: str
+    created_at: Optional[datetime] = None
+
+
+class ChatSessionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: Optional[str] = None
+    messages: list[ChatMessageResponse] = []
+    messages_count: int = 0
+    last_message: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+# ──────────────────────────── Direct Messages ────────────────────────────
+
+
+class DirectMessageCreate(BaseModel):
+    content: str
+
+
+class DirectMessageResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    sender_id: Optional[int] = None
+    recipient_id: Optional[int] = None
+    content: str
+    created_at: Optional[datetime] = None
+    is_read: bool = False
+
+
+class ConversationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user: Optional[UserResponse] = None
+    last_message: Optional[DirectMessageResponse] = None
+    unread_count: int = 0
+    last_message_at: Optional[datetime] = None

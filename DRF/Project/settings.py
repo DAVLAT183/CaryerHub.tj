@@ -165,3 +165,8 @@ CHANNEL_LAYERS = {
 }
 
 ## parsing,generate pdf,dont have hearts, add images for job cart,map for job,image in global page
+
+EXPRESS_PAY_TOKEN = os.environ.get('EXPRESS_PAY_TOKEN', '')
+EXPRESS_PAY_SECRET = os.environ.get('EXPRESS_PAY_SECRET', '')
+EXPRESS_PAY_MERCHANT_ID = os.environ.get('EXPRESS_PAY_MERCHANT_ID', '')
+EXPRESS_PAY_SANDBOX = os.environ.get('EXPRESS_PAY_SANDBOX', 'True') == 'True'

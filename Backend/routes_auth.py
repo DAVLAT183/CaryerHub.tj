@@ -150,7 +150,15 @@ async def google_auth_callback(code: str = None, error: str = None, db: AsyncSes
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
 
-    if not user:
+    if user:
+        if avatar_url and not user.avatar:
+            user.avatar = avatar_url
+        if name and not user.first_name:
+            user.first_name = name.split(" ")[0]
+            user.last_name = " ".join(name.split(" ")[1:]) if " " in name else ""
+        await db.commit()
+        await db.refresh(user)
+    else:
         username = email.split("@")[0]
         base = username
         counter = 1

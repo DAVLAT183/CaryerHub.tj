@@ -16,6 +16,7 @@ router.register(r'applications', views.ApplicationViewSet,basename="applications
 router.register(r'favorites', views.FavoriteViewSet,basename="favorites")
 router.register(r'chat/sessions', views.ChatSessionViewSet,basename="chat-sessions")
 router.register(r'notifications', views.NotificationViewSet,basename="notifications")
+router.register(r'tariffs', views.TariffPlanViewSet, basename="tariffs")
 
 urlpatterns = [
     path('register/', views.RegisterView.as_view(), name='register'),
@@ -39,5 +40,12 @@ urlpatterns = [
     path('jobs/<int:job_id>/pdf/', views.generate_job_pdf, name='generate-job-pdf'),
     path('resumes/<int:resume_id>/pdf/', views.generate_resume_pdf, name='generate-resume-pdf'),
     path('route/', views.calculate_route, name='calculate-route'),
+    path('payments/create/', views.create_payment, name='create-payment'),
+    path('payments/webhook/', views.payment_webhook, name='payment-webhook'),
+    path('payments/my-subscription/', views.my_subscription, name='my-subscription'),
+    path('payments/history/', views.payment_history, name='payment-history'),
+    path('payments/check-access/', views.check_plan_access, name='check-plan-access'),
+    path('auth/google/', views.google_auth_redirect, name='google-auth-redirect'),
+    path('auth/google/callback/', views.google_auth_callback, name='google-auth-callback'),
     path('', include(router.urls)),
 ]

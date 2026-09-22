@@ -1,16 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, or_, desc, case
+from sqlalchemy import select, func, and_, or_, desc
 from database import get_db
 from models import (
     Favorite, Job, Notification, ChatSession, ChatMessage,
-    DirectMessage, User, StudentProfile, EmployerProfile, Application
+    DirectMessage, User, StudentProfile, EmployerProfile, Application,
+    Resume,
 )
 from schemas import (
     FavoriteCreate, FavoriteResponse, NotificationResponse,
     ChatSessionCreate, ChatSessionResponse, ChatMessageCreate,
     ChatMessageResponse, DirectMessageCreate, DirectMessageResponse,
-    ConversationResponse, UserResponse
+    ConversationResponse, UserResponse,
 )
 from auth import get_current_user, get_optional_user
 
@@ -42,13 +43,21 @@ async def list_favorites(
 
     responses = []
     for fav in favorites:
-        resp = FavoriteResponse.model_validate(fav)
+        resp = FavoriteResponse(
+            id=fav.id,
+            student_id=fav.student_id,
+            job_id=fav.job_id,
+            created_at=fav.created_at,
+        )
         job = (await db.execute(
             select(Job).where(Job.id == fav.job_id)
         )).scalar_one_or_none()
         if job:
             resp.job_title = job.title
-            resp.company_name = job.company_name
+            employer = (await db.execute(
+                select(EmployerProfile).where(EmployerProfile.id == job.employer_id)
+            )).scalar_one_or_none()
+            resp.company_name = employer.company_name if employer else None
         responses.append(resp)
     return responses
 
@@ -90,9 +99,17 @@ async def add_favorite(
     await db.commit()
     await db.refresh(favorite)
 
-    resp = FavoriteResponse.model_validate(favorite)
-    resp.job_title = job.title
-    resp.company_name = job.company_name
+    resp = FavoriteResponse(
+        id=favorite.id,
+        student_id=favorite.student_id,
+        job_id=favorite.job_id,
+        created_at=favorite.created_at,
+        job_title=job.title,
+    )
+    employer = (await db.execute(
+        select(EmployerProfile).where(EmployerProfile.id == job.employer_id)
+    )).scalar_one_or_none()
+    resp.company_name = employer.company_name if employer else None
     return resp
 
 
@@ -379,9 +396,6 @@ async def delete_chat_session(
     if not session:
         raise HTTPException(status_code=404, detail="Chat session not found")
 
-    await db.execute(
-        select(ChatMessage).where(ChatMessage.session_id == session.id)
-    )
     messages = (await db.execute(
         select(ChatMessage).where(ChatMessage.session_id == session.id)
     )).scalars().all()
@@ -433,16 +447,23 @@ async def send_chat_message(
 
     try:
         from ai_service import _chat_with_gemini
-        ai_response_text = await _chat_with_gemini(message_in.content, session.id, db)
+        history_msgs = (await db.execute(
+            select(ChatMessage)
+            .where(ChatMessage.session_id == session.id)
+            .order_by(ChatMessage.created_at)
+        )).scalars().all()
+
+        messages_for_ai = [{"role": m.role, "content": m.content} for m in history_msgs]
+        ai_response_text = await _chat_with_gemini(messages_for_ai)
     except Exception:
         lower = message_in.content.lower()
-        if any(w in lower for w in ["hello", "hi", "hey"]):
+        if any(w in lower for w in ["hello", "hi", "hey", "привет"]):
             ai_response_text = "Hello! I'm your AI career consultant. How can I help you today?"
-        elif "salary" in lower:
+        elif "salary" in lower or "зарплат" in lower:
             ai_response_text = "Salary expectations vary by role, industry, and experience. Research market rates on sites like Glassdoor or Payscale."
-        elif "resume" in lower:
+        elif "resume" in lower or "резюме" in lower:
             ai_response_text = "A strong resume highlights quantifiable achievements, uses action verbs, and is tailored to the job description."
-        elif "interview" in lower:
+        elif "interview" in lower or "собеседован" in lower:
             ai_response_text = "Practice common questions, research the company, and prepare thoughtful questions to ask the interviewer."
         else:
             ai_response_text = "I'm here to help with your career questions. Feel free to ask about jobs, resumes, interviews, or career growth."
@@ -506,19 +527,19 @@ async def list_conversations(
 ):
     sent_subq = (
         select(
-            DirectMessage.sender_id.label("other_id"),
+            DirectMessage.recipient_id.label("other_id"),
             DirectMessage.created_at,
         )
-        .where(DirectMessage.receiver_id == current_user.id)
+        .where(DirectMessage.sender_id == current_user.id)
         .subquery()
     )
 
     received_subq = (
         select(
-            DirectMessage.receiver_id.label("other_id"),
+            DirectMessage.sender_id.label("other_id"),
             DirectMessage.created_at,
         )
-        .where(DirectMessage.sender_id == current_user.id)
+        .where(DirectMessage.recipient_id == current_user.id)
         .subquery()
     )
 
@@ -549,7 +570,7 @@ async def list_conversations(
             select(func.count(DirectMessage.id)).where(
                 and_(
                     DirectMessage.sender_id == row.other_id,
-                    DirectMessage.receiver_id == current_user.id,
+                    DirectMessage.recipient_id == current_user.id,
                     DirectMessage.is_read == False,
                 )
             )
@@ -561,11 +582,11 @@ async def list_conversations(
                 or_(
                     and_(
                         DirectMessage.sender_id == current_user.id,
-                        DirectMessage.receiver_id == row.other_id,
+                        DirectMessage.recipient_id == row.other_id,
                     ),
                     and_(
                         DirectMessage.sender_id == row.other_id,
-                        DirectMessage.receiver_id == current_user.id,
+                        DirectMessage.recipient_id == current_user.id,
                     ),
                 )
             )
@@ -606,11 +627,11 @@ async def get_messages_with_user(
             or_(
                 and_(
                     DirectMessage.sender_id == current_user.id,
-                    DirectMessage.receiver_id == user_id,
+                    DirectMessage.recipient_id == user_id,
                 ),
                 and_(
                     DirectMessage.sender_id == user_id,
-                    DirectMessage.receiver_id == current_user.id,
+                    DirectMessage.recipient_id == current_user.id,
                 ),
             )
         ).order_by(DirectMessage.created_at)
@@ -619,7 +640,7 @@ async def get_messages_with_user(
 
     unread_to_mark = [
         m for m in messages
-        if m.sender_id == user_id and m.receiver_id == current_user.id and not m.is_read
+        if m.sender_id == user_id and m.recipient_id == current_user.id and not m.is_read
     ]
     for msg in unread_to_mark:
         msg.is_read = True
@@ -649,40 +670,24 @@ async def send_direct_message(
 
     dm = DirectMessage(
         sender_id=current_user.id,
-        receiver_id=user_id,
+        recipient_id=user_id,
         content=message_in.content,
     )
     db.add(dm)
 
+    sender_name = current_user.first_name or current_user.username
     notification = Notification(
         user_id=user_id,
         notification_type="message",
         title="New Message",
-        message=f"You have a new message from {current_user.full_name or current_user.email}",
+        message=f"You have a new message from {sender_name}",
     )
     db.add(notification)
 
     await db.commit()
     await db.refresh(dm)
 
-    resp = DirectMessageResponse.model_validate(dm)
-
-    try:
-        import asyncio
-        from websocket_manager import manager
-        asyncio.create_task(
-            manager.send_personal_message(
-                {
-                    "type": "new_message",
-                    "message": DirectMessageResponse.model_validate(dm).model_dump(mode="json"),
-                },
-                user_id,
-            )
-        )
-    except Exception:
-        pass
-
-    return resp
+    return DirectMessageResponse.model_validate(dm)
 
 
 @router.get("/messages/employers/", response_model=list[UserResponse])
@@ -697,20 +702,33 @@ async def list_employers_for_chat(
     if not student_profile:
         raise HTTPException(status_code=400, detail="Student profile not found")
 
-    employer_ids_result = await db.execute(
-        select(Application.employer_id)
-        .where(Application.student_id == student_profile.id)
-        .distinct()
+    applications_result = await db.execute(
+        select(Application)
+        .join(Resume, Application.resume_id == Resume.id)
+        .where(Resume.student_id == student_profile.id)
     )
-    employer_user_ids = [row[0] for row in employer_ids_result.all()]
+    applications = applications_result.scalars().all()
 
-    if not employer_user_ids:
+    if not applications:
+        return []
+
+    employer_ids = set()
+    for app in applications:
+        job_result = await db.execute(select(Job).where(Job.id == app.job_id))
+        job = job_result.scalar_one_or_none()
+        if job:
+            emp_result = await db.execute(
+                select(EmployerProfile).where(EmployerProfile.id == job.employer_id)
+            )
+            emp = emp_result.scalar_one_or_none()
+            if emp:
+                employer_ids.add(emp.user_id)
+
+    if not employer_ids:
         return []
 
     employers_result = await db.execute(
-        select(User)
-        .where(User.id.in_(employer_user_ids))
-        .order_by(User.full_name)
+        select(User).where(User.id.in_(employer_ids))
     )
 
     return [UserResponse.model_validate(u) for u in employers_result.scalars().all()]

@@ -23,10 +23,10 @@ async def run_daily_parse():
 def setup_scheduler():
     scheduler.add_job(
         run_daily_parse,
-        CronTrigger(hour=5, minute=0),
+        CronTrigger(hour=17, minute=0),
         id="daily_job_parse",
-        name="Daily Job Parsing at 5AM",
+        name="Daily Job Parsing at 5PM",
         replace_existing=True,
     )
     scheduler.start()
-    logger.info("Scheduler started - daily parse at 05:00 Asia/Dushanbe")
+    logger.info("Scheduler started - daily parse at 17:00 Asia/Dushanbe")

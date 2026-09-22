@@ -3,6 +3,7 @@ import httpx
 import re
 import json
 import os
+import logging
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlencode
 from datetime import datetime, timezone
@@ -11,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import async_session
 from models import Job, EmployerProfile, Category
+
+logger = logging.getLogger("job_parser")
 
 
 TAJIK_SOURCES = [
@@ -65,6 +68,16 @@ HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
 }
+
+
+def _get_proxy_url() -> str | None:
+    proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY") or ""
+    return proxy.strip() if proxy.strip() else None
+
+
+def _make_client(proxy: bool = False) -> httpx.AsyncClient:
+    proxy_url = _get_proxy_url() if proxy else None
+    return httpx.AsyncClient(follow_redirects=True, timeout=30, proxy=proxy_url)
 
 
 async def _get_gemini_client():
@@ -277,7 +290,7 @@ async def parse_somon_tj(db: AsyncSession, max_jobs: int = 30) -> dict:
     source = TAJIK_SOURCES[0]
     results = {"created": 0, "updated": 0, "errors": 0, "source": source["name"]}
 
-    async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
+    async with _make_client(proxy=False) as client:
         try:
             resp = await client.get(source["jobs_url"], headers=HEADERS)
             resp.raise_for_status()
@@ -347,10 +360,14 @@ async def parse_somon_tj(db: AsyncSession, max_jobs: int = 30) -> dict:
 
 
 async def parse_remotive(db: AsyncSession, max_jobs: int = 50) -> dict:
-    source = FOREIGN_SOURCES[0]
     results = {"created": 0, "updated": 0, "errors": 0, "source": "remotive"}
 
-    async with httpx.AsyncClient(timeout=30) as client:
+    proxy_url = _get_proxy_url()
+    if not proxy_url:
+        logger.warning("remotive: прокси не настроен, пропуск (иностранный сайт)")
+        return {"success": True, "skipped": True, "reason": "no_proxy", **results}
+
+    async with _make_client(proxy=True) as client:
         try:
             resp = await client.get("https://remotive.com/api/remote-jobs?limit=50")
             resp.raise_for_status()
@@ -394,7 +411,12 @@ async def parse_remotive(db: AsyncSession, max_jobs: int = 50) -> dict:
 async def parse_arbeitnow(db: AsyncSession, max_jobs: int = 50) -> dict:
     results = {"created": 0, "updated": 0, "errors": 0, "source": "arbeitnow"}
 
-    async with httpx.AsyncClient(timeout=30) as client:
+    proxy_url = _get_proxy_url()
+    if not proxy_url:
+        logger.warning("arbeitnow: прокси не настроен, пропуск (иностранный сайт)")
+        return {"success": True, "skipped": True, "reason": "no_proxy", **results}
+
+    async with _make_client(proxy=True) as client:
         try:
             resp = await client.get("https://www.arbeitnow.com/api/job-board-api")
             resp.raise_for_status()
@@ -442,7 +464,12 @@ async def parse_arbeitnow(db: AsyncSession, max_jobs: int = 50) -> dict:
 async def parse_himalayas(db: AsyncSession, max_jobs: int = 50) -> dict:
     results = {"created": 0, "updated": 0, "errors": 0, "source": "himalayas"}
 
-    async with httpx.AsyncClient(timeout=30) as client:
+    proxy_url = _get_proxy_url()
+    if not proxy_url:
+        logger.warning("himalayas: прокси не настроен, пропуск (иностранный сайт)")
+        return {"success": True, "skipped": True, "reason": "no_proxy", **results}
+
+    async with _make_client(proxy=True) as client:
         try:
             resp = await client.get("https://himalayas.app/jobs/api?limit=50")
             resp.raise_for_status()

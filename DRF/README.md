@@ -5,4 +5,8 @@ ai konsultant dolzen rabotat bez authoriyzation
 podredoktirovat stil 
 pomenat pole vvoda dla rabotodatela
 dobavit mesto dla vostanovleniya porola
-dobavit knopku create resume
+dobavit knopku create resumea  
+
+
+# FOR PATENT
+malumotnoma da borai proekt

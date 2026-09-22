@@ -4,7 +4,8 @@ from .models import (
     StudentProfile, EmployerProfile,
     Category, Resume, Job, Application, Favorite,
     ChatSession, ChatMessage, EmailVerification, DirectMessage,
-    WorkSchedule, WorkFormat, WorkExperience, Notification
+    WorkSchedule, WorkFormat, WorkExperience, Notification,
+    TariffPlan, UserSubscription, Payment
 )
 
 User = get_user_model()
@@ -332,3 +333,38 @@ class NotificationSerializer(serializers.ModelSerializer):
                 except (Application.DoesNotExist, ValueError):
                     pass
         return None
+
+
+class TariffPlanSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TariffPlan
+        fields = ['id', 'name', 'display_name', 'price', 'duration_days', 'features']
+
+
+class UserSubscriptionSerializer(serializers.ModelSerializer):
+    plan = TariffPlanSerializer(read_only=True)
+
+    class Meta:
+        model = UserSubscription
+        fields = ['id', 'plan', 'status', 'started_at', 'expires_at', 'created_at']
+        read_only_fields = ['id', 'status', 'started_at', 'expires_at', 'created_at']
+
+
+class PaymentSerializer(serializers.ModelSerializer):
+    subscription_plan = serializers.CharField(source='subscription.plan.display_name', read_only=True)
+
+    class Meta:
+        model = Payment
+        fields = ['id', 'invoice_no', 'amount', 'status', 'payment_method', 'paid_at', 'created_at', 'subscription_plan']
+        read_only_fields = ['id', 'invoice_no', 'amount', 'status', 'payment_method', 'paid_at', 'created_at']
+
+
+class CreatePaymentSerializer(serializers.Serializer):
+    plan_id = serializers.IntegerField()
+
+    def validate_plan_id(self, value):
+        try:
+            plan = TariffPlan.objects.get(id=value, is_active=True, price__gt=0)
+        except TariffPlan.DoesNotExist:
+            raise serializers.ValidationError('Тарифный план не найден или бесплатный.')
+        return value

@@ -14,9 +14,22 @@ class User(AbstractUser):
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
     location = models.CharField(max_length=200, blank=True)
     is_email_verified = models.BooleanField(default=False)
+    current_plan = models.CharField(max_length=20, default='free')
 
     def __str__(self):
         return f'{self.username} ({self.get_role_display()})'
+
+    def has_active_subscription(self):
+        from django.utils import timezone
+        return UserSubscription.objects.filter(
+            user=self, status='active', expires_at__gt=timezone.now()
+        ).exists()
+
+    def get_subscription(self):
+        from django.utils import timezone
+        return UserSubscription.objects.filter(
+            user=self, status='active', expires_at__gt=timezone.now()
+        ).select_related('plan').first()
 
 
 class EmailVerification(models.Model):
@@ -316,3 +329,70 @@ class Notification(models.Model):
 
     def __str__(self):
         return f'{self.user.username}: {self.title}'
+
+
+class TariffPlan(models.Model):
+    PLAN_CHOICES = (
+        ('free', 'Бесплатный'),
+        ('professional', 'Профессиональный'),
+        ('corporate', 'Корпоративный'),
+    )
+    name = models.CharField(max_length=20, choices=PLAN_CHOICES, unique=True)
+    display_name = models.CharField(max_length=100)
+    price = models.PositiveIntegerField(default=0)
+    duration_days = models.PositiveIntegerField(default=30)
+    is_active = models.BooleanField(default=True)
+    features = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name_plural = 'Тарифные планы'
+
+    def __str__(self):
+        return f'{self.display_name} - {self.price} сомони'
+
+
+class UserSubscription(models.Model):
+    STATUS_CHOICES = (
+        ('active', 'Активна'),
+        ('expired', 'Истекла'),
+        ('cancelled', 'Отменена'),
+        ('pending', 'Ожидает оплаты'),
+    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='subscriptions')
+    plan = models.ForeignKey(TariffPlan, on_delete=models.PROTECT, related_name='subscriptions')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    started_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name_plural = 'Подписки'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.user.username} - {self.plan.display_name} ({self.status})'
+
+
+class Payment(models.Model):
+    STATUS_CHOICES = (
+        ('pending', 'Ожидает'),
+        ('paid', 'Оплачен'),
+        ('failed', 'Ошибка'),
+        ('cancelled', 'Отменён'),
+    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='payments')
+    subscription = models.ForeignKey(UserSubscription, on_delete=models.CASCADE, related_name='payments')
+    invoice_no = models.CharField(max_length=100, unique=True)
+    amount = models.PositiveIntegerField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    payment_method = models.CharField(max_length=50, blank=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name_plural = 'Платежи'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.user.username} - {self.amount} сомони ({self.status})'

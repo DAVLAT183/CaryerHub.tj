@@ -587,7 +587,7 @@ def _generate_resume_pdf(resume, student_profile=None, user=None, style: str = "
 @extras_router.get("/jobs/{job_id}/pdf/")
 async def get_job_pdf(
     job_id: int,
-    style: str = Query("modern", regex="^(classic|modern|minimal|creative)$"),
+    style: str = Query("modern", pattern="^(classic|modern|minimal|creative)$"),
     db: AsyncSession = Depends(get_db),
 ):
     _register_fonts()
@@ -620,7 +620,7 @@ async def get_job_pdf(
 @extras_router.get("/resumes/{resume_id}/pdf/")
 async def get_resume_pdf(
     resume_id: int,
-    style: str = Query("modern", regex="^(classic|modern|minimal|creative)$"),
+    style: str = Query("modern", pattern="^(classic|modern|minimal|creative)$"),
     db: AsyncSession = Depends(get_db),
 ):
     _register_fonts()

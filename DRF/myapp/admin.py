@@ -3,16 +3,17 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from .models import (
     User, StudentProfile, EmployerProfile,
     Category, Resume, Job, Application, Favorite,
-    WorkSchedule, WorkFormat, WorkExperience, Notification
+    WorkSchedule, WorkFormat, WorkExperience, Notification,
+    TariffPlan, UserSubscription, Payment
 )
 
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
-    list_display = ['username', 'email', 'role', 'is_staff']
-    list_filter = ['role', 'is_staff']
+    list_display = ['username', 'email', 'role', 'current_plan', 'is_staff']
+    list_filter = ['role', 'is_staff', 'current_plan']
     fieldsets = BaseUserAdmin.fieldsets + (
-        ('Дополнительно', {'fields': ('role', 'phone', 'avatar')}),
+        ('Дополнительно', {'fields': ('role', 'phone', 'avatar', 'current_plan')}),
     )
 
 
@@ -79,3 +80,23 @@ class WorkExperienceAdmin(admin.ModelAdmin):
 class NotificationAdmin(admin.ModelAdmin):
     list_display = ['user', 'notification_type', 'title', 'is_read', 'created_at']
     list_filter = ['notification_type', 'is_read']
+
+
+@admin.register(TariffPlan)
+class TariffPlanAdmin(admin.ModelAdmin):
+    list_display = ['name', 'display_name', 'price', 'duration_days', 'is_active']
+    list_filter = ['is_active']
+
+
+@admin.register(UserSubscription)
+class UserSubscriptionAdmin(admin.ModelAdmin):
+    list_display = ['user', 'plan', 'status', 'started_at', 'expires_at', 'created_at']
+    list_filter = ['status', 'plan']
+    search_fields = ['user__username', 'user__email']
+
+
+@admin.register(Payment)
+class PaymentAdmin(admin.ModelAdmin):
+    list_display = ['user', 'invoice_no', 'amount', 'status', 'payment_method', 'paid_at', 'created_at']
+    list_filter = ['status', 'payment_method']
+    search_fields = ['user__username', 'invoice_no']

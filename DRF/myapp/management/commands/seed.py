@@ -1,8 +1,8 @@
 from django.core.management.base import BaseCommand
-from myapp.models import (
+from DRF.myapp.models import (
     User, StudentProfile, EmployerProfile,
     Category, Resume, Job, Application, Favorite,
-    WorkSchedule, WorkFormat, WorkExperience
+    WorkSchedule, WorkFormat, WorkExperience, TariffPlan
 )
 
 
@@ -22,6 +22,52 @@ class Command(BaseCommand):
         EmployerProfile.objects.all().delete()
         StudentProfile.objects.all().delete()
         User.objects.all().delete()
+
+        self.stdout.write('Создание тарифных планов...')
+        tariffs_data = [
+            {
+                'name': 'free',
+                'display_name': 'Бесплатный',
+                'price': 0,
+                'duration_days': 36500,
+                'features': [
+                    'Размещение 3 вакансий',
+                    'Базовый поиск кандидатов',
+                    'Чат с кандидатами',
+                    'Email уведомления',
+                ],
+            },
+            {
+                'name': 'professional',
+                'display_name': 'Профессиональный',
+                'price': 299,
+                'duration_days': 30,
+                'features': [
+                    'Безлимит вакансий',
+                    'Расширенный поиск',
+                    'Приоритет в выдаче',
+                    'Аналитика просмотров',
+                    'Выделение вакансии',
+                    'Приоритетная поддержка',
+                ],
+            },
+            {
+                'name': 'corporate',
+                'display_name': 'Корпоративный',
+                'price': 999,
+                'duration_days': 30,
+                'features': [
+                    'Всё из Профессионального',
+                    'API доступ',
+                    'Персональный менеджер',
+                    'Кастомный брендинг',
+                    'Интеграция с HR-системами',
+                    'SLA 99.9%',
+                ],
+            },
+        ]
+        for td in tariffs_data:
+            TariffPlan.objects.get_or_create(name=td['name'], defaults=td)
 
         self.stdout.write('Создание графиков работы...')
         schedules_data = [
@@ -355,6 +401,7 @@ class Command(BaseCommand):
             f'  - {len(resumes_data)} резюме\n'
             f'  - {len(apps_data)} откликов\n'
             f'  - {len(favs)} избранных\n'
+            f'  - {len(tariffs_data)} тарифных планов\n'
             f'\nДемо пользователи (пароль: demo1234):\n'
             f'  admin       - Администратор (is_superuser)\n'
             f'  ali         - Студент\n'

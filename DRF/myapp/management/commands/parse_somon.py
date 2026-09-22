@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand
-from myapp.parsing_service import parse_somon_tj_jobs
+from DRF.myapp.parsing_service import parse_somon_tj_jobs
 
 
 class Command(BaseCommand):

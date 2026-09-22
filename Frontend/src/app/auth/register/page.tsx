@@ -208,7 +208,7 @@ export default function RegisterPage() {
 
           <button
             type="button"
-            onClick={() => window.location.href = `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}/auth/google/`}
+            onClick={() => window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/auth/google/`}
             className="w-full h-11 rounded-xl border border-border-default bg-surface-default hover:bg-surface-hover transition-all duration-200 flex items-center justify-center gap-3 text-text-secondary hover:text-text-primary font-medium text-sm"
           >
             <svg viewBox="0 0 24 24" width="20" height="20">

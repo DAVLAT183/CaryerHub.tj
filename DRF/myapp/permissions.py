@@ -26,3 +26,17 @@ class IsStudent(BasePermission):
 class IsAdminRole(BasePermission):
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.role == 'admin'
+
+
+class IsProOrAbove(BasePermission):
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        return request.user.current_plan in ('professional', 'corporate')
+
+
+class IsCorporate(BasePermission):
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        return request.user.current_plan == 'corporate'
