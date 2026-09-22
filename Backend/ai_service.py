@@ -1,0 +1,299 @@
+import json
+import os
+import re
+import logging
+from typing import Any
+
+try:
+    import google.generativeai as genai
+
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+
+from models import StudentProfile, Resume, Job
+
+logger = logging.getLogger("careerhub.ai")
+
+SKILL_SUGGESTIONS = {
+    "programming": [
+        "Python", "JavaScript", "TypeScript", "Java", "C++", "Go", "Rust",
+        "SQL", "HTML/CSS", "React", "Vue.js", "Node.js", "Django", "FastAPI",
+        "Git", "Docker", "Linux", "REST API", "PostgreSQL", "MongoDB",
+    ],
+    "design": [
+        "Figma", "Adobe Photoshop", "Adobe Illustrator", "UI/UX Design",
+        "Prototyping", "Wireframing", "User Research", "Adobe XD",
+        "Sketch", "InVision", "Responsive Design", "Typography",
+    ],
+    "marketing": [
+        "SEO", "Google Analytics", "Social Media Marketing", "Content Marketing",
+        "Email Marketing", "Google Ads", "Facebook Ads", "Copywriting",
+        "A/B Testing", "Marketing Strategy", "Brand Management", "CRM",
+    ],
+    "data": [
+        "Data Analysis", "Machine Learning", "SQL", "Python", "R",
+        "Tableau", "Power BI", "Excel", "Statistics", "Pandas", "NumPy",
+        "Scikit-learn", "TensorFlow", "Deep Learning", "ETL",
+    ],
+    "business": [
+        "Project Management", "Agile/Scrum", "Leadership", "Communication",
+        "Problem Solving", "Team Management", "Strategic Planning",
+        "Financial Analysis", "Stakeholder Management", "Risk Assessment",
+    ],
+    "finance": [
+        "Financial Analysis", "Accounting", "Excel", "SAP", "Bloomberg Terminal",
+        "Financial Modeling", "Budgeting", "Forecasting", "IFRS/GAAP",
+        "Risk Management", "Portfolio Management", "SQL",
+    ],
+    "general": [
+        "Communication", "Teamwork", "Problem Solving", "Time Management",
+        "Critical Thinking", "Adaptability", "Creativity", "Leadership",
+        "Attention to Detail", "MS Office", "English", "Russian",
+    ],
+}
+
+CATEGORY_KEYWORDS = {
+    "programming": [
+        "programming", "developer", "software", "backend", "frontend", "fullstack",
+        "web", "mobile", "devops", "engineer", "coder", "it",
+    ],
+    "design": [
+        "design", "designer", "ui", "ux", "graphic", "creative", "art",
+        "visual", "illustration", "brand",
+    ],
+    "marketing": [
+        "marketing", "seo", "advertising", "content", "social media", "pr",
+        "brand", "digital marketing", "growth",
+    ],
+    "data": [
+        "data", "analytics", "machine learning", "ai", "science",
+        "data engineer", "data analyst", "ml engineer",
+    ],
+    "business": [
+        "business", "management", "consulting", "strategy", "operations",
+        "project manager", "product manager", "analyst",
+    ],
+    "finance": [
+        "finance", "banking", "investment", "accounting", "audit",
+        "financial", "trader", "risk",
+    ],
+    "general": [
+        "assistant", "intern", "junior", "trainee", "office", "reception",
+        "sales", "customer", "support", "call center",
+    ],
+}
+
+RESUME_CHAT_SYSTEM_PROMPT = """You are an AI resume builder assistant for students. Your goal is to help students create professional resumes.
+
+When responding, you MUST return valid JSON in this exact format:
+{
+    "message": "Your conversational response to the student",
+    "resume_data": {
+        "title": "Resume title based on student's field",
+        "about": "Professional summary paragraph",
+        "skills": ["skill1", "skill2", "skill3"],
+        "schedule_type": "full-time or part-time or flexible",
+        "work_format": "online or offline or hybrid"
+    }
+}
+
+Rules:
+- Always include resume_data in every response
+- Update resume_data progressively as the student provides more information
+- If the student hasn't given enough info yet, provide reasonable defaults based on what they've shared
+- Keep the about section professional and concise (2-3 sentences)
+- Suggest 5-8 relevant skills based on the student's field
+- Be friendly and encouraging in your messages
+- Respond in the same language the student uses
+"""
+
+
+def _build_user_profile(student_profile: StudentProfile) -> dict[str, Any]:
+    user = student_profile.user
+    profile = {
+        "full_name": f"{user.first_name} {user.last_name}".strip() or user.username,
+        "email": user.email,
+        "phone": user.phone or "",
+        "university": student_profile.university or "",
+        "faculty": student_profile.faculty or "",
+        "course": student_profile.course,
+        "city": student_profile.city or "",
+        "age": student_profile.age,
+        "category": "general",
+    }
+
+    faculty_lower = (student_profile.faculty or "").lower()
+    for category, keywords in CATEGORY_KEYWORDS.items():
+        if any(kw in faculty_lower for kw in keywords):
+            profile["category"] = category
+            break
+
+    return profile
+
+
+def _generate_resume_rule_based(student_profile: StudentProfile) -> dict[str, Any]:
+    profile = _build_user_profile(student_profile)
+    category = profile["category"]
+    skills = SKILL_SUGGESTIONS.get(category, SKILL_SUGGESTIONS["general"])[:8]
+
+    parts = []
+    if profile["university"]:
+        parts.append(profile["university"])
+    if profile["faculty"]:
+        parts.append(profile["faculty"])
+    title = " | ".join(parts) if parts else "Student Resume"
+
+    about_parts = []
+    if profile["university"]:
+        about_parts.append(f"Student at {profile['university']}")
+    if profile["faculty"]:
+        about_parts.append(f"studying {profile['faculty']}")
+    if profile["city"]:
+        about_parts.append(f"based in {profile['city']}")
+    about = " ".join(about_parts) + "." if about_parts else "Motivated student looking for opportunities."
+
+    return {
+        "title": title,
+        "about": about,
+        "skills": skills,
+        "schedule_type": "flexible",
+        "work_format": "online",
+        "category": category,
+    }
+
+
+async def generate_resume(student_profile: StudentProfile) -> dict[str, Any]:
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key or not GEMINI_AVAILABLE:
+        logger.info("Gemini unavailable, using rule-based resume generation")
+        return _generate_resume_rule_based(student_profile)
+
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("gemini-2.5-flash")
+
+        profile = _build_user_profile(student_profile)
+        prompt = f"""Generate a professional resume for a student with this profile:
+Name: {profile['full_name']}
+University: {profile['university']}
+Faculty/Faculty: {profile['faculty']}
+City: {profile['city']}
+Detected category: {profile['category']}
+
+Return ONLY valid JSON in this format:
+{{
+    "title": "Professional resume title",
+    "about": "2-3 sentence professional summary",
+    "skills": ["skill1", "skill2", ...],
+    "schedule_type": "full-time or part-time or flexible",
+    "work_format": "online or offline or hybrid"
+}}
+
+Skills should be relevant to the student's field ({profile['category']}). Include 6-8 skills."""
+
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        if match:
+            return json.loads(match.group())
+        return _generate_resume_rule_based(student_profile)
+    except Exception as e:
+        logger.warning(f"Gemini generation failed, falling back to rule-based: {e}")
+        return _generate_resume_rule_based(student_profile)
+
+
+async def _chat_with_gemini(
+    messages: list[dict[str, str]],
+    system_prompt: str = RESUME_CHAT_SYSTEM_PROMPT,
+) -> str:
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key or not GEMINI_AVAILABLE:
+        return json.dumps({
+            "message": "AI is currently unavailable. Please try again later or create your resume manually.",
+            "resume_data": None,
+        })
+
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(
+            "gemini-2.5-flash",
+            system_instruction=system_prompt,
+        )
+
+        history = []
+        for msg in messages[:-1]:
+            role = "user" if msg["role"] == "user" else "model"
+            history.append({"role": role, "parts": [msg["content"]]})
+
+        chat = model.start_chat(history=history)
+        response = chat.send_message(messages[-1]["content"])
+        return response.text.strip()
+    except Exception as e:
+        logger.error(f"Gemini chat failed: {e}")
+        return json.dumps({
+            "message": "Sorry, an error occurred. Please try again.",
+            "resume_data": None,
+        })
+
+
+async def find_matching_jobs(
+    student_profile: StudentProfile,
+    resumes: list[Resume],
+    db: AsyncSession,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    profile = _build_user_profile(student_profile)
+    category = profile["category"]
+
+    all_skills = set()
+    for resume in resumes:
+        if resume.skills:
+            if isinstance(resume.skills, list):
+                all_skills.update(resume.skills)
+            elif isinstance(resume.skills, str):
+                try:
+                    parsed = json.loads(resume.skills)
+                    if isinstance(parsed, list):
+                        all_skills.update(parsed)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+    result = await db.execute(
+        select(Job).where(Job.is_active == True)
+    )
+    jobs = result.scalars().all()
+
+    scored_jobs = []
+    for job in jobs:
+        score = 0.0
+        job_text = f"{job.title} {job.description or ''}".lower()
+
+        if category != "general":
+            category_kw = CATEGORY_KEYWORDS.get(category, [])
+            matches = sum(1 for kw in category_kw if kw in job_text)
+            score += min(matches * 15, 45)
+
+        if all_skills:
+            skill_matches = sum(
+                1 for skill in all_skills if skill.lower() in job_text
+            )
+            score += min(skill_matches * 8, 30)
+
+        if profile["city"] and job.location_address:
+            if profile["city"].lower() in job.location_address.lower():
+                score += 10
+
+        if job.work_format:
+            work_prefs = ["online", "offline", "hybrid"]
+            if profile.get("work_format") in job.work_format:
+                score += 5
+
+        if score > 0:
+            scored_jobs.append({"job": job, "match_score": min(round(score, 1), 100)})
+
+    scored_jobs.sort(key=lambda x: x["match_score"], reverse=True)
+    return scored_jobs[:limit]
