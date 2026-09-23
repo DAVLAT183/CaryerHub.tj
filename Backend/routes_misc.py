@@ -8,13 +8,14 @@ from database import get_db
 from models import (
     Favorite, Job, Notification, ChatSession, ChatMessage,
     DirectMessage, User, StudentProfile, EmployerProfile, Application,
-    Resume,
+    Resume, NotificationPreference,
 )
 from schemas import (
     FavoriteCreate, FavoriteResponse, NotificationResponse,
     ChatSessionCreate, ChatSessionResponse, ChatMessageCreate,
     ChatMessageResponse, DirectMessageCreate, DirectMessageResponse,
     ConversationResponse, UserResponse,
+    NotificationPreferenceResponse, NotificationPreferenceUpdate,
 )
 from auth import get_current_user, get_optional_user
 
@@ -285,6 +286,52 @@ async def delete_notification(
 
     await db.delete(notif)
     await db.commit()
+
+
+# ──────────────────────────────────────────────
+# NOTIFICATION PREFERENCES
+# ──────────────────────────────────────────────
+
+@router.get("/notification-settings/", response_model=NotificationPreferenceResponse)
+async def get_notification_settings(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    pref = (await db.execute(
+        select(NotificationPreference).where(NotificationPreference.user_id == current_user.id)
+    )).scalar_one_or_none()
+
+    if not pref:
+        pref = NotificationPreference(user_id=current_user.id)
+        db.add(pref)
+        await db.commit()
+        await db.refresh(pref)
+
+    return pref
+
+
+@router.put("/notification-settings/", response_model=NotificationPreferenceResponse)
+async def update_notification_settings(
+    payload: NotificationPreferenceUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    pref = (await db.execute(
+        select(NotificationPreference).where(NotificationPreference.user_id == current_user.id)
+    )).scalar_one_or_none()
+
+    if not pref:
+        pref = NotificationPreference(user_id=current_user.id)
+        db.add(pref)
+
+    for field in ("email_jobs", "email_applications", "email_messages", "push_jobs", "push_messages"):
+        value = getattr(payload, field)
+        if value is not None:
+            setattr(pref, field, value)
+
+    await db.commit()
+    await db.refresh(pref)
+    return pref
 
 
 # ──────────────────────────────────────────────

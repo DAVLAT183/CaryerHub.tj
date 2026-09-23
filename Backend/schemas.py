@@ -553,6 +553,26 @@ class NotificationResponse(BaseModel):
     created_at: Optional[datetime] = None
 
 
+class NotificationPreferenceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    email_jobs: bool = True
+    email_applications: bool = True
+    email_messages: bool = True
+    push_jobs: bool = False
+    push_messages: bool = False
+    updated_at: Optional[datetime] = None
+
+
+class NotificationPreferenceUpdate(BaseModel):
+    email_jobs: Optional[bool] = None
+    email_applications: Optional[bool] = None
+    email_messages: Optional[bool] = None
+    push_jobs: Optional[bool] = None
+    push_messages: Optional[bool] = None
+
+
 # ──────────────────────────── Chat ────────────────────────────
 
 
