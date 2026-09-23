@@ -18,6 +18,7 @@ from models import (
 from schemas import (
     UserResponse,
     UserUpdateRequest,
+    ChangePasswordRequest,
     StudentProfileResponse,
     StudentProfileCreate,
     EmployerProfileResponse,
@@ -25,7 +26,7 @@ from schemas import (
     CategoryResponse,
     CategoryCreate,
 )
-from auth import get_current_user, get_optional_user
+from auth import get_current_user, get_optional_user, hash_password, verify_password
 
 
 def _slugify(text: str) -> str:
@@ -85,6 +86,32 @@ async def update_current_user_profile(
     await db.commit()
     await db.refresh(current_user)
     return current_user
+
+
+@router.post("/users/me/change-password/")
+async def change_password(
+    payload: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not current_user.hashed_password:
+        raise HTTPException(
+            status_code=400,
+            detail="Password login is not available for this account (signed in via Google)",
+        )
+
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+
+    if len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+
+    if payload.new_password == payload.current_password:
+        raise HTTPException(status_code=400, detail="New password must differ from the current one")
+
+    current_user.hashed_password = hash_password(payload.new_password)
+    await db.commit()
+    return {"detail": "Password updated successfully"}
 
 
 @router.get("/student-profiles/", response_model=List[StudentProfileResponse])

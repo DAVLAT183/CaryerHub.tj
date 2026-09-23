@@ -436,6 +436,11 @@ class UserUpdateRequest(BaseModel):
     location: Optional[str] = None
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
 # ──────────────────────────── Profile Create/Update ────────────────────────────
 
 
