@@ -7,6 +7,7 @@ import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import MiniAIChat from '@/components/chat/MiniAIChat';
 import BackToTop from '@/components/ui/BackToTop';
+import KeyboardShortcuts from '@/components/ui/KeyboardShortcuts';
 import './globals.css';
 
 const inter = Inter({
@@ -45,6 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Footer />
               <MiniAIChat />
               <BackToTop />
+              <KeyboardShortcuts />
             </AuthProvider>
           </I18nProvider>
         </ThemeProvider>
