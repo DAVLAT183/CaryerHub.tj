@@ -13,7 +13,7 @@ from schemas import (
     ResumeCreateSchema, ResumeResponse, JobCreateSchema, JobResponse,
     ApplicationCreateSchema, ApplicationSchema,
 )
-from auth import get_current_user
+from auth import get_current_user, get_optional_user
 
 router = APIRouter(prefix="/api", tags=["Jobs"])
 
@@ -149,9 +149,12 @@ async def _serialize_job(job: Job, db: AsyncSession, applications_count: int = 0
         "experience_required": job.experience_required,
         "is_active": job.is_active,
         "image": job.image,
+        "image_url": job.image or None,
         "location_lat": job.location_lat,
         "location_lng": job.location_lng,
         "location_address": job.location_address,
+        "has_location": job.location_lat is not None and job.location_lng is not None,
+        "is_favorited": False,
         "source": job.source,
         "source_url": job.source_url,
         "source_id": job.source_id,
@@ -354,7 +357,7 @@ async def list_jobs(
     search: Optional[str] = Query(None),
     ordering: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
-    user: Optional[User] = Depends(get_current_user),
+    user: Optional[User] = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
 ):
     is_employer = user and user.role == "employer"
@@ -426,7 +429,7 @@ async def list_jobs(
 @router.get("/jobs/{job_id}/")
 async def get_job(
     job_id: int,
-    user: Optional[User] = Depends(get_current_user),
+    user: Optional[User] = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(Job).where(Job.id == job_id))

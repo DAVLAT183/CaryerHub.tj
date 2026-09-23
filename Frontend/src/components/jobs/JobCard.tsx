@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { MapPin, Clock, Sparkles, Map, CheckCircle2 } from 'lucide-react';
 import { clsx } from '@/lib/utils';
 import type { Job } from '@/types';
-import { formatSalary, formatSchedule, formatWorkFormat, formatDate } from '@/lib/utils';
+import { formatSalary, formatSchedule, formatWorkFormat, formatDate, mediaUrl } from '@/lib/utils';
 
 interface JobCardProps {
   job: Job;
@@ -23,8 +23,9 @@ export default function JobCard({ job, isFavorited, isApplied, onToggleFavorite 
             <div className="logo-minimal">
               {job.employer?.user?.avatar ? (
                 <img
-                  src={job.employer.user.avatar}
+                  src={mediaUrl(job.employer.user.avatar)}
                   alt={job.employer.company_name}
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                 />
               ) : (
                 <span>{job.employer?.company_name?.charAt(0) || '?'}</span>

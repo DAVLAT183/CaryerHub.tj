@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <rect width="32" height="32" rx="8" fill="#7BAFD4"/>
+  <text x="14" y="21" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="15" fill="white" letter-spacing="-0.5">CH</text>
+  <line x1="21" y1="22" x2="21" y2="10" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+  <polyline points="18.5,13 21,9 23.5,13" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -28,7 +28,8 @@ export default function Avatar({ src, alt = '', size = 'md', className }: Avatar
       <img
         src={resolvedSrc}
         alt={alt}
-        className={clsx('rounded-full object-cover border border-[var(--color-border-default)]', sizeMap[size], className)}
+        className={clsx('rounded-xl object-cover border border-[var(--color-border-default)]', sizeMap[size], className)}
+        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
       />
     );
   }
@@ -36,8 +37,8 @@ export default function Avatar({ src, alt = '', size = 'md', className }: Avatar
   return (
     <div
       className={clsx(
-        'rounded-full flex items-center justify-center font-semibold',
-        'bg-accent-primary text-white',
+        'rounded-xl flex items-center justify-center font-bold tracking-tight',
+        'bg-[#7EB6E6] text-white',
         sizeMap[size],
         className
       )}

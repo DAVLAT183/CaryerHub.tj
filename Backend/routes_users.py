@@ -25,7 +25,7 @@ from schemas import (
     CategoryResponse,
     CategoryCreate,
 )
-from auth import get_current_user
+from auth import get_current_user, get_optional_user
 
 
 def _slugify(text: str) -> str:
@@ -265,7 +265,6 @@ async def delete_employer_profile(
 
 @router.get("/categories/", response_model=List[CategoryResponse])
 async def list_categories(
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(Category))
@@ -275,7 +274,6 @@ async def list_categories(
 @router.get("/categories/{slug}", response_model=CategoryResponse)
 async def get_category(
     slug: str,
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(Category).where(Category.slug == slug))

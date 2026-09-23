@@ -1,0 +1,7 @@
+﻿python : Python 
+строка:1 знак:47
++ ... Desktop\CaryerHub\Backend; python -X utf8 test_import.py 2>&1 | Out-F ...
++                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Python :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

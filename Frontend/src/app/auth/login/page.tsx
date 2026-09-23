@@ -67,8 +67,8 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <div className="card p-6 sm:p-8">
           <div className="text-center mb-8">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-accent-primary to-accent-cyan flex items-center justify-center mx-auto mb-4 shadow-lg shadow-accent-primary/20">
-              <Briefcase size={26} className="text-white" />
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+              <img src="/logo.svg" alt="CareerHub" className="w-14 h-14 rounded-2xl" />
             </div>
             <h1 className="font-heading font-bold text-2xl mb-1.5 text-text-primary">Добро пожаловать</h1>
             <p className="text-sm text-text-muted">Войдите, чтобы продолжить поиск работы</p>

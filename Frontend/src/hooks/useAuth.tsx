@@ -46,13 +46,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchUser]);
 
   const login = async (username: string, password: string) => {
-    const res = await api.post('/token/', { username, password });
+    const res = await api.post('/auth/login/', { username, password });
     saveTokens(res.data.access, res.data.refresh);
     await fetchUser();
   };
 
-  const register = async (data: { username: string; email: string; password: string; role: string; phone?: string }) => {
-    await api.post('/register/', data);
+  const register = async (data: { username: string; email: string; password: string; role: string; phone?: string; companyName?: string }) => {
+    await api.post('/auth/register/', {
+      username: data.username,
+      email: data.email,
+      password: data.password,
+      role: data.role,
+      phone: data.phone,
+      company_name: data.companyName,
+    });
     await login(data.username, data.password);
   };
 

@@ -25,6 +25,9 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: 'CareerHub // Современная платформа поиска работы',
   description: 'Найди работу или стажировку мечты. Премиальный интерфейс, умные фильтры, лучшие компании.',
+  icons: {
+    icon: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
