@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
 import { clsx } from '@/lib/utils';
+import { useI18n } from '@/i18n/I18nContext';
 
 interface SelectOption {
   value: string;
@@ -25,11 +26,13 @@ export default function Select({
   onChange,
   label,
   options,
-  placeholder = 'Выберите...',
+  placeholder,
   error,
   disabled = false,
   className,
 }: SelectProps) {
+  const { t } = useI18n();
+  const resolvedPlaceholder = placeholder ?? t('select.placeholder');
   const [isOpen, setIsOpen] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -144,7 +147,7 @@ export default function Select({
             {selectedOption.label}
           </span>
         ) : (
-          <span className="text-sm text-text-muted">{placeholder}</span>
+          <span className="text-sm text-text-muted">{resolvedPlaceholder}</span>
         )}
 
         {!isReadOnly && (
@@ -202,7 +205,7 @@ export default function Select({
             );
           })}
           {options.length === 0 && (
-            <div className="px-4 py-3 text-sm text-text-muted">Нет вариантов</div>
+            <div className="px-4 py-3 text-sm text-text-muted">{t('select.empty')}</div>
           )}
         </div>
       )}

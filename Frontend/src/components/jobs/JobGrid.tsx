@@ -1,5 +1,6 @@
 import JobCard from './JobCard';
 import Skeleton from '@/components/ui/Skeleton';
+import { useI18n } from '@/i18n/I18nContext';
 import type { Job } from '@/types';
 
 interface JobGridProps {
@@ -11,11 +12,12 @@ interface JobGridProps {
 }
 
 export default function JobGrid({ jobs, loading, favorites = [], appliedJobs = [], onToggleFavorite }: JobGridProps) {
+  const { t } = useI18n();
   if (loading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 auto-rows-fr">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="glass rounded-card p-5">
+          <div key={i} className="glass rounded-card p-5 h-[300px]">
             <div className="flex items-start gap-3 mb-3">
               <Skeleton className="w-10 h-10 rounded-btn flex-shrink-0" />
               <div className="flex-1">
@@ -40,14 +42,14 @@ export default function JobGrid({ jobs, loading, favorites = [], appliedJobs = [
     return (
       <div className="text-center py-16">
         <div className="text-5xl mb-4">🔍</div>
-        <h3 className="font-heading font-semibold text-lg text-soft mb-2">Ничего не найдено</h3>
-        <p className="text-sm text-muted">Попробуйте изменить параметры поиска</p>
+        <h3 className="font-heading font-semibold text-lg text-soft mb-2">{t('jobs.noJobs')}</h3>
+        <p className="text-sm text-muted">{t('jobs.noJobsDescriptionFull')}</p>
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 auto-rows-fr">
       {jobs.map((job) => (
         <JobCard
           key={job.id}

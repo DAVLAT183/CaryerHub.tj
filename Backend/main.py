@@ -1,6 +1,11 @@
 import logging
 import json
 from contextlib import asynccontextmanager
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -115,7 +120,7 @@ ws_manager = ConnectionManager()
 @app.websocket("/ws/notifications/")
 async def websocket_notifications(websocket: WebSocket, token: str = ""):
     from auth import decode_token
-    from database import async_session_factory
+    from database import async_session
     from models import User
     from sqlalchemy import select
 

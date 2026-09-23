@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { ChevronDown, RotateCcw, Check, X } from 'lucide-react';
 import { clsx } from '@/lib/utils';
 import api from '@/lib/api';
+import { useI18n } from '@/i18n/I18nContext';
 import type { Category } from '@/types';
 
 interface Filters {
@@ -20,31 +21,32 @@ interface JobFiltersProps {
   onChange: (filters: Filters) => void;
 }
 
-const scheduleOptions = [
-  { value: 'full_time', label: 'Полная занятость' },
-  { value: 'part_time', label: 'Частичная занятость' },
-  { value: 'flexible', label: 'Гибкий график' },
-  { value: 'shift', label: 'Сменный график' },
-];
-
-const formatOptions = [
-  { value: 'remote', label: 'Удаленно' },
-  { value: 'hybrid', label: 'Гибрид' },
-  { value: 'office', label: 'В офисе' },
-];
-
-const experienceOptions = [
-  { value: 'no_experience', label: 'Без опыта' },
-  { value: '1_3', label: '1-3 года' },
-  { value: '3_5', label: '3-5 лет' },
-  { value: '5_plus', label: '5+ лет' },
-];
-
 const CATEGORY_VISIBLE_COUNT = 6;
 
 export default function JobFilters({ filters, onChange }: JobFiltersProps) {
+  const { t } = useI18n();
   const [categories, setCategories] = useState<Category[]>([]);
   const [catsExpanded, setCatsExpanded] = useState(false);
+
+  const scheduleOptions = [
+    { value: 'full_time', label: t('jobs.fullTime') },
+    { value: 'part_time', label: t('jobs.partTime') },
+    { value: 'flexible', label: t('jobs.flexible') },
+    { value: 'shift', label: t('jobs.shift') },
+  ];
+
+  const formatOptions = [
+    { value: 'remote', label: t('jobs.remote') },
+    { value: 'hybrid', label: t('jobs.hybrid') },
+    { value: 'office', label: t('jobs.office') },
+  ];
+
+  const experienceOptions = [
+    { value: 'no_experience', label: t('jobs.noExperience') },
+    { value: '1_3', label: t('experience.1_3') },
+    { value: '3_5', label: t('experience.3_5') },
+    { value: '5_plus', label: t('experience.5_plus') },
+  ];
 
   useEffect(() => {
     api.get('/categories/').then((res) => {
@@ -106,10 +108,10 @@ export default function JobFilters({ filters, onChange }: JobFiltersProps) {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <SectionTitle>Категория</SectionTitle>
+        <SectionTitle>{t('jobs.category')}</SectionTitle>
         <div className="flex flex-wrap gap-2">
           <Chip active={!filters.category} onClick={() => update({ category: '' })}>
-            Все
+            {t('jobs.all')}
           </Chip>
           {visibleCategories.map((cat) => (
             <Chip
@@ -127,13 +129,13 @@ export default function JobFilters({ filters, onChange }: JobFiltersProps) {
             className="mt-2 text-[12px] text-text-muted hover:text-text-primary flex items-center gap-1 transition-colors"
           >
             <ChevronDown size={12} className={clsx('transition-transform', catsExpanded && 'rotate-180')} />
-            {catsExpanded ? 'Свернуть' : `Ещё (${categories.length - CATEGORY_VISIBLE_COUNT})`}
+            {catsExpanded ? t('jobs.collapse') : t('jobs.moreN', { n: categories.length - CATEGORY_VISIBLE_COUNT })}
           </button>
         )}
       </div>
 
       <div>
-        <SectionTitle>График работы</SectionTitle>
+        <SectionTitle>{t('jobs.schedule')}</SectionTitle>
         <div className="flex flex-wrap gap-2">
           {scheduleOptions.map((opt) => (
             <Chip
@@ -148,7 +150,7 @@ export default function JobFilters({ filters, onChange }: JobFiltersProps) {
       </div>
 
       <div>
-        <SectionTitle>Формат работы</SectionTitle>
+        <SectionTitle>{t('jobs.workFormat')}</SectionTitle>
         <div className="flex flex-wrap gap-2">
           {formatOptions.map((opt) => (
             <Chip
@@ -163,7 +165,7 @@ export default function JobFilters({ filters, onChange }: JobFiltersProps) {
       </div>
 
       <div>
-        <SectionTitle>Опыт работы</SectionTitle>
+        <SectionTitle>{t('jobs.experience')}</SectionTitle>
         <div className="flex flex-wrap gap-2">
           {experienceOptions.map((opt) => (
             <Chip
@@ -178,7 +180,7 @@ export default function JobFilters({ filters, onChange }: JobFiltersProps) {
       </div>
 
       <div>
-        <SectionTitle>Дополнительно</SectionTitle>
+        <SectionTitle>{t('jobs.extra')}</SectionTitle>
         <label className="flex items-center gap-2.5 cursor-pointer">
           <input
             type="checkbox"
@@ -187,7 +189,7 @@ export default function JobFilters({ filters, onChange }: JobFiltersProps) {
             className="w-4 h-4 rounded border-border-default bg-surface-card text-accent-primary focus:ring-2 focus:ring-accent-primary/20 accent-accent-primary"
           />
           <span className="text-[13px] text-text-secondary hover:text-text-primary transition-colors">
-            Только без опыта
+            {t('jobs.noExpOnly')}
           </span>
         </label>
       </div>
@@ -199,7 +201,7 @@ export default function JobFilters({ filters, onChange }: JobFiltersProps) {
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-medium text-text-muted hover:text-text-primary hover:bg-surface-hover transition-colors"
           >
             <RotateCcw size={13} />
-            Сбросить все фильтры
+            {t('jobs.resetAll')}
           </button>
         </div>
       )}

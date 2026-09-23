@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { ChevronRight, Home } from 'lucide-react';
 import { clsx } from '@/lib/utils';
+import { useI18n } from '@/i18n/I18nContext';
 
 export interface Crumb {
   label: string;
@@ -15,6 +16,7 @@ interface BreadcrumbsProps {
 }
 
 export default function Breadcrumbs({ items, className }: BreadcrumbsProps) {
+  const { t } = useI18n();
   if (!items.length) return null;
 
   return (
@@ -28,7 +30,7 @@ export default function Breadcrumbs({ items, className }: BreadcrumbsProps) {
         aria-label="Home"
       >
         <Home size={14} />
-        <span className="hidden sm:inline">Главная</span>
+        <span className="hidden sm:inline">{t('common.home')}</span>
       </Link>
 
       {items.map((item, index) => {

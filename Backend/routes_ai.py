@@ -109,18 +109,20 @@ async def resume_chat_endpoint(
 
     raw_response = await _chat_with_gemini(messages)
 
+    from ai_service import _strip_code_fences
+
     try:
-        parsed = json.loads(raw_response)
+        parsed = json.loads(_strip_code_fences(raw_response))
         ai_message = parsed.get("message", "I couldn't process that.")
         resume_data = parsed.get("resume_data")
     except (json.JSONDecodeError, TypeError):
-        ai_message = raw_response
+        ai_message = _strip_code_fences(raw_response)
         resume_data = None
 
     return {"message": ai_message, "resume_data": resume_data}
 
 
-@router.get("/recommend-jobs/", response_model=list[JobRecommendation])
+@router.get("/recommend-jobs/")
 async def recommend_jobs_endpoint(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -147,8 +149,8 @@ async def recommend_jobs_endpoint(
             job_resp = JobResponse.model_validate(job)
         except Exception:
             continue
-        recommendations.append(
-            JobRecommendation(job=job_resp, match_score=item["match_score"])
-        )
+        payload = job_resp.model_dump()
+        payload["match_score"] = item["match_score"]
+        recommendations.append(payload)
 
     return recommendations

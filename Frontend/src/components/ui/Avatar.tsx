@@ -3,7 +3,7 @@ import { clsx, mediaUrl } from '@/lib/utils';
 interface AvatarProps {
   src?: string | null;
   alt?: string;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
 }
 
@@ -11,6 +11,7 @@ const sizeMap = {
   sm: 'w-8 h-8 text-xs',
   md: 'w-10 h-10 text-sm',
   lg: 'w-14 h-14 text-lg',
+  xl: 'w-[72px] h-[72px] text-2xl rounded-2xl',
 };
 
 export default function Avatar({ src, alt = '', size = 'md', className }: AvatarProps) {

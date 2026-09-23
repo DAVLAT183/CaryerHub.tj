@@ -240,7 +240,7 @@ export default function Navbar() {
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
           className="lg:hidden btn-icon"
-          aria-label={mobileOpen ? 'Закрыть меню' : 'Открыть меню'}
+                    aria-label={mobileOpen ? t('nav.closeMenu') : t('nav.openMenu')}
         >
           {mobileOpen ? <X size={24} /> : <Menu size={24} />}
         </button>

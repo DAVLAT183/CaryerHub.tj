@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
 import { clsx } from '@/lib/utils';
+import { useI18n } from '@/i18n/I18nContext';
 import type { ResumeStyle } from '@/types';
 
 interface StyleOption {
@@ -12,26 +13,18 @@ interface StyleOption {
   description: string;
 }
 
-const STYLE_OPTIONS: StyleOption[] = [
-  {
-    value: 'classic',
-    label: 'Классический',
-    color: '#10B981',
-    description: 'Традиционное деловое резюме',
-  },
-  {
-    value: 'minimal',
-    label: 'Минималистичный',
-    color: '#6B7078',
-    description: 'Максимум информации, минимум декора',
-  },
-  {
-    value: 'creative',
-    label: 'Креативный',
-    color: '#F59E0B',
-    description: 'Более выразительный визуальный стиль',
-  },
-];
+const STYLE_META: Record<string, { color: string; descKey: string }> = {
+  classic: { color: '#10B981', descKey: 'resumeStyles.classicDesc' },
+  minimal: { color: '#6B7078', descKey: 'resumeStyles.minimalDesc' },
+  creative: { color: '#F59E0B', descKey: 'resumeStyles.creativeDesc' },
+};
+
+const STYLE_OPTIONS: StyleOption[] = (['classic', 'minimal', 'creative'] as ResumeStyle[]).map((v) => ({
+  value: v,
+  label: v,
+  color: STYLE_META[v].color,
+  description: STYLE_META[v].descKey,
+}));
 
 interface ResumeStyleSelectorProps {
   value: ResumeStyle | string;
@@ -47,11 +40,18 @@ export default function ResumeStyleSelector({
   value,
   onChange,
   label,
-  placeholder = 'Выберите стиль',
+  placeholder,
   disabled = false,
   error,
   compact = false,
 }: ResumeStyleSelectorProps) {
+  const { t } = useI18n();
+  const resolvedPlaceholder = placeholder ?? t('resumeStyles.selectStyle');
+  const localizedOptions: StyleOption[] = STYLE_OPTIONS.map((o) => ({
+    ...o,
+    label: t(`resumeStyles.${o.value}`),
+    description: t(o.description),
+  }));
   const [isOpen, setIsOpen] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -59,7 +59,7 @@ export default function ResumeStyleSelector({
   const listRef = useRef<HTMLDivElement>(null);
 
   const isReadOnly = !onChange;
-  const selectedOption = STYLE_OPTIONS.find((o) => o.value === value);
+  const selectedOption = localizedOptions.find((o) => o.value === value);
 
   const close = useCallback(() => {
     setIsOpen(false);
@@ -176,7 +176,7 @@ export default function ResumeStyleSelector({
             </span>
           </>
         ) : (
-          <span className="text-sm text-text-muted">{placeholder}</span>
+          <span className="text-sm text-text-muted">{resolvedPlaceholder}</span>
         )}
 
         {!isReadOnly && (

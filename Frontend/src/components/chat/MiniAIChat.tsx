@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { X, Send, Loader2, Sparkles, MessageSquare, Minimize2, Maximize2 } from 'lucide-react';
+import { X, Send, Loader2, Sparkles, MessageSquare, Bot } from 'lucide-react';
 import api from '@/lib/api';
 import { showToast, getErrorMessage } from '@/lib/utils';
 import { clsx } from '@/lib/utils';
@@ -88,16 +88,22 @@ export default function MiniAIChat() {
   if (pathname === '/chat') return null;
 
   return (
-    <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[500]">
+    <div className="fixed bottom-5 right-5 z-[500]">
       {/* Chat Button */}
       {!isOpen && (
-<button
-            onClick={toggleChat}
-            className="btn-float w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-accent-primary text-white flex items-center justify-center transition-all duration-200 group"
-            aria-label="Открыть AI чат"
-          >
-            <img src="/robot-avatar.svg" alt="AI" className="w-5 h-5 sm:w-6 sm:h-6 group-hover:rotate-12 transition-transform duration-200" />
-          </button>
+        <button
+          type="button"
+          onClick={toggleChat}
+          className="group w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-accent-primary to-accent-cyan text-white flex items-center justify-center shadow-[0_8px_24px_rgba(16,185,129,0.35)] hover:shadow-[0_10px_28px_rgba(16,185,129,0.45)] hover:scale-105 active:scale-95 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary focus-visible:ring-offset-2"
+          aria-label="Открыть AI чат"
+        >
+          <img
+            src="/robot-avatar.svg"
+            alt=""
+            aria-hidden="true"
+            className="w-5 h-5 sm:w-6 sm:h-6 group-hover:rotate-12 transition-transform duration-200"
+          />
+        </button>
       )}
 
       {/* Chat Window */}

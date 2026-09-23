@@ -16,10 +16,12 @@ import Skeleton from '@/components/ui/Skeleton';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import ReadingProgress from '@/components/ui/ReadingProgress';
 import ResumeStyleSelector, { STYLE_OPTIONS } from '@/components/ui/ResumeStyleSelector';
-
-const STYLE_OPTIONS_MAP = Object.fromEntries(STYLE_OPTIONS.map((o) => [o.value, o]));
 import { formatSalary, formatSchedule, formatWorkFormat, formatResumeStyle, formatDate, showToast, getErrorMessage } from '@/lib/utils';
 import type { Job, Resume, ResumeStyle } from '@/types';
+
+type StyleOptionItem = (typeof STYLE_OPTIONS)[number];
+
+const STYLE_OPTIONS_MAP = Object.fromEntries(STYLE_OPTIONS.map((o: StyleOptionItem) => [o.value, o]));
 
 export default function JobDetailPage() {
   const { id } = useParams();
@@ -207,7 +209,8 @@ export default function JobDetailPage() {
       const link = document.createElement('a');
       link.href = url;
       const styleNames: Record<string, string> = { classic: 'Классический', modern: 'Современный', minimal: 'Минималистичный', creative: 'Креативный' };
-      link.download = `vacancy_${job.id}_${styleNames[style || 'pdfStyle'] || 'PDF'}.pdf`;
+      const styleKey = style || 'modern';
+      link.download = `vacancy_${job.id}_${styleNames[styleKey] || 'PDF'}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -368,7 +371,7 @@ export default function JobDetailPage() {
                 {pdfMenuOpen && (
                   <div className="absolute right-0 top-full mt-1 z-50 w-56 bg-surface-card border border-border-default rounded-xl shadow-[0_6px_20px_rgba(20,30,40,0.08)] overflow-hidden">
                     <p className="px-3 py-2 text-xs text-text-muted font-medium border-b border-border-default">Выберите стиль</p>
-                    {STYLE_OPTIONS.map((s) => (
+                    {STYLE_OPTIONS.map((s: StyleOptionItem) => (
                       <button
                         key={s.value}
                         onClick={() => handleDownloadPdf(s.value)}

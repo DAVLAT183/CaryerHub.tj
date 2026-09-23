@@ -18,10 +18,8 @@ interface User {
 
 interface DirectMessage {
   id: number;
-  sender: number;
-  sender_name: string;
-  recipient: number;
-  recipient_name: string;
+  sender_id: number | null;
+  recipient_id: number | null;
   content: string;
   created_at: string;
   is_read: boolean;
@@ -29,7 +27,7 @@ interface DirectMessage {
 
 interface Conversation {
   user: User;
-  last_message: DirectMessage;
+  last_message: DirectMessage | null;
   unread_count: number;
 }
 
@@ -38,7 +36,7 @@ interface EmployerChatProps {
 }
 
 export default function EmployerChat({ initialUserId }: EmployerChatProps) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeUser, setActiveUser] = useState<User | null>(null);
   const [messages, setMessages] = useState<DirectMessage[]>([]);
@@ -51,10 +49,8 @@ export default function EmployerChat({ initialUserId }: EmployerChatProps) {
     if (data.type === 'chat_message' && activeUser && data.sender_id === activeUser.id) {
       const newMsg: DirectMessage = {
         id: Date.now(),
-        sender: data.sender_id as number,
-        sender_name: data.sender_name as string,
-        recipient: user?.id || 0,
-        recipient_name: user?.username || '',
+        sender_id: data.sender_id as number,
+        recipient_id: user?.id || 0,
         content: data.message as string,
         created_at: new Date().toISOString(),
         is_read: false,
@@ -75,8 +71,11 @@ export default function EmployerChat({ initialUserId }: EmployerChatProps) {
   const headerLabel = isStudent ? 'Чат с работодателями' : 'Чат со студентами';
 
   useEffect(() => {
-    loadConversations();
-  }, []);
+    if (!authLoading) {
+      loadConversations();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -85,18 +84,32 @@ export default function EmployerChat({ initialUserId }: EmployerChatProps) {
   const loadConversations = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/messages/conversations/');
-      setConversations(res.data);
+      const partnersPath = isStudent ? '/messages/employers/' : '/messages/students/';
+      const [convRes, partnersRes] = await Promise.all([
+        api.get('/messages/conversations/'),
+        api.get(partnersPath).catch(() => ({ data: [] as User[] })),
+      ]);
+
+      const merged: Conversation[] = [...convRes.data];
+      const knownIds = new Set(merged.map((c) => c.user.id));
+
+      for (const partner of partnersRes.data as User[]) {
+        if (!knownIds.has(partner.id)) {
+          merged.push({ user: partner, last_message: null, unread_count: 0 });
+          knownIds.add(partner.id);
+        }
+      }
+
+      setConversations(merged);
 
       if (initialUserId) {
-        const conv = res.data.find((c: Conversation) => c.user.id === initialUserId);
+        const conv = merged.find((c) => c.user.id === initialUserId);
         if (conv) {
           openChat(conv.user);
         } else {
           try {
             const userRes = await api.get(`/users/${initialUserId}/`);
-            const userData = userRes.data;
-            openChat(userData);
+            openChat(userRes.data);
           } catch {
             setActiveUser({ id: initialUserId, username: otherRoleLabel, email: '', avatar: null, role: isStudent ? 'employer' : 'student' });
           }
@@ -196,17 +209,17 @@ export default function EmployerChat({ initialUserId }: EmployerChatProps) {
             messages.map((msg) => (
               <div
                 key={msg.id}
-                className={`flex ${msg.sender === activeUser.id ? 'justify-start' : 'justify-end'}`}
+                className={`flex ${msg.sender_id === activeUser.id ? 'justify-start' : 'justify-end'}`}
               >
                 <div
                   className={`max-w-[80%] sm:max-w-[70%] px-3 sm:px-4 py-2.5 sm:py-3 rounded-[14px] sm:rounded-[16px] text-[13px] sm:text-sm leading-relaxed ${
-                    msg.sender === activeUser.id
+                    msg.sender_id === activeUser.id
                       ? 'bg-[var(--color-surface-card)] text-[var(--color-text-primary)] border border-[var(--color-border-default)] rounded-bl-[4px]'
                       : 'bg-[var(--color-accent-primary)] text-white rounded-br-[4px]'
                   }`}
                 >
                   <p>{msg.content}</p>
-                  <p className={`text-[9px] sm:text-[10px] mt-1 ${msg.sender === activeUser.id ? 'text-[var(--color-text-muted)]' : 'text-white/70'}`}>
+                  <p className={`text-[9px] sm:text-[10px] mt-1 ${msg.sender_id === activeUser.id ? 'text-[var(--color-text-muted)]' : 'text-white/70'}`}>
                     {formatTime(msg.created_at)}
                   </p>
                 </div>
@@ -280,11 +293,13 @@ export default function EmployerChat({ initialUserId }: EmployerChatProps) {
                       </span>
                     )}
                   </div>
-                  {conv.last_message && (
-                    <p className="text-xs text-[var(--color-text-muted)] truncate mt-0.5">
-                      {conv.last_message.content}
-                    </p>
-                  )}
+                  <p className="text-xs text-[var(--color-text-muted)] truncate mt-0.5">
+                    {conv.last_message
+                      ? conv.last_message.content
+                      : isStudent
+                        ? 'Напишите первым'
+                        : 'Напишите студенту'}
+                  </p>
                 </div>
               </div>
             </button>

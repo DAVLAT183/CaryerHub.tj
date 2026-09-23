@@ -376,39 +376,88 @@ def _register_fonts():
     return registered
 
 
+def _job_info_rows(job) -> list[list[str]]:
+    info_rows = []
+    if getattr(job, "employer_name", None):
+        info_rows.append(["Компания", str(job.employer_name)])
+    elif job.employer_id:
+        info_rows.append(["Компания", "N/A"])
+    salary = ""
+    if job.salary_min and job.salary_max:
+        salary = f"{job.salary_min} - {job.salary_max} TJS"
+    elif job.salary_min:
+        salary = f"от {job.salary_min} TJS"
+    if salary:
+        info_rows.append(["Зарплата", salary])
+    if job.schedule:
+        info_rows.append(["График", job.schedule])
+    if job.work_format:
+        info_rows.append(["Формат", job.work_format])
+    if job.location_address:
+        info_rows.append(["Локация", job.location_address])
+    if job.experience_required:
+        info_rows.append(["Опыт", str(job.experience_required)])
+    if job.created_at:
+        posted = (
+            job.created_at.strftime("%Y-%m-%d")
+            if hasattr(job.created_at, "strftime")
+            else str(job.created_at)
+        )
+        info_rows.append(["Опубликовано", posted])
+    return info_rows
+
+
 def _generate_job_pdf(job, style: str = "modern") -> bytes:
     from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
-    from reportlab.lib.units import mm, cm
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.units import cm
+    from reportlab.platypus import (
+        SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable, ListFlowable, ListItem,
+    )
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.lib.enums import TA_LEFT, TA_CENTER
 
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.5 * cm, bottomMargin=1.5 * cm,
-                            leftMargin=2 * cm, rightMargin=2 * cm)
     scheme = STYLE_COLORS.get(style, STYLE_COLORS["modern"])
-    primary_rgb = _hex_to_rgb(scheme["primary"])
-    accent_rgb = _hex_to_rgb(scheme["accent"])
+    primary = colors.HexColor(scheme["primary"])
+    accent = colors.HexColor(scheme["accent"])
+    text_color = colors.HexColor(scheme["text"])
+    info_rows = _job_info_rows(job)
+    description = (job.description or "").replace("\n", "<br/>")
 
+    if style == "classic":
+        _build_classic_job_pdf(buf, job, info_rows, description, primary, accent, text_color)
+    elif style == "minimal":
+        _build_minimal_job_pdf(buf, job, info_rows, description, primary, accent, text_color)
+    elif style == "creative":
+        _build_creative_job_pdf(buf, job, info_rows, description, primary, accent, text_color)
+    else:
+        _build_modern_job_pdf(buf, job, info_rows, description, primary, accent, text_color)
+
+    buf.seek(0)
+    return buf.getvalue()
+
+
+def _build_modern_job_pdf(buf, job, info_rows, description, primary, accent, text_color):
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4, topMargin=1.5 * cm, bottomMargin=1.5 * cm,
+        leftMargin=2 * cm, rightMargin=2 * cm,
+    )
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle("Title2", parent=styles["Title"], fontSize=18,
-                                 textColor=colors.Color(primary_rgb[0] / 255, primary_rgb[1] / 255, primary_rgb[2] / 255),
-                                 spaceAfter=6)
-    heading_style = ParagraphStyle("Heading2", parent=styles["Heading2"], fontSize=13,
-                                   textColor=colors.Color(accent_rgb[0] / 255, accent_rgb[1] / 255, accent_rgb[2] / 255),
-                                   spaceAfter=4)
-    body_style = ParagraphStyle("Body2", parent=styles["BodyText"], fontSize=10, leading=14)
+    title_style = ParagraphStyle("MTitle", parent=styles["Title"], fontSize=18, textColor=primary, spaceAfter=6)
+    heading_style = ParagraphStyle("MHeading", parent=styles["Heading2"], fontSize=13, textColor=accent, spaceAfter=4)
+    body_style = ParagraphStyle("MBody", parent=styles["BodyText"], fontSize=10, leading=14, textColor=text_color)
 
     elements = []
-
-    header_data = [[Paragraph(f"<b>{job.title}</b>", title_style)]]
-    header_table = Table(header_data, colWidths=[doc.width])
+    header_table = Table([[Paragraph(f"<b>{job.title}</b>", title_style)]], colWidths=[doc.width])
     header_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), colors.Color(primary_rgb[0] / 255, primary_rgb[1] / 255, primary_rgb[2] / 255)),
+        ("BACKGROUND", (0, 0), (-1, -1), primary),
         ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
-        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
         ("LEFTPADDING", (0, 0), (-1, -1), 12),
         ("RIGHTPADDING", (0, 0), (-1, -1), 12),
         ("TOPPADDING", (0, 0), (-1, -1), 10),
@@ -417,34 +466,14 @@ def _generate_job_pdf(job, style: str = "modern") -> bytes:
     elements.append(header_table)
     elements.append(Spacer(1, 12))
 
-    info_rows = []
-    if job.employer_id:
-        info_rows.append(["Company", str(getattr(job, 'employer_name', 'N/A'))])
-    salary = ""
-    if job.salary_min and job.salary_max:
-        salary = f"{job.salary_min} - {job.salary_max} TJS"
-    elif job.salary_min:
-        salary = f"From {job.salary_min} TJS"
-    if salary:
-        info_rows.append(["Salary", salary])
-    if job.schedule:
-        info_rows.append(["Schedule", job.schedule])
-    if job.work_format:
-        info_rows.append(["Work Format", job.work_format])
-    if job.location_address:
-        info_rows.append(["Location", job.location_address])
-    if job.created_at:
-        info_rows.append(["Posted", job.created_at.strftime("%Y-%m-%d") if hasattr(job.created_at, 'strftime') else str(job.created_at)])
-
     if info_rows:
-        info_data = [[Paragraph("<b>Job Details</b>", heading_style), ""]]
+        info_data = [[Paragraph("<b>Параметры</b>", heading_style), ""]]
         for label, value in info_rows:
             info_data.append([f"<b>{label}:</b>", str(value)])
-
         info_table = Table(info_data, colWidths=[4 * cm, doc.width - 4 * cm])
-        info_style = [
+        info_table.setStyle(TableStyle([
             ("SPAN", (0, 0), (-1, 0)),
-            ("BACKGROUND", (0, 0), (-1, 0), colors.Color(accent_rgb[0] / 255, accent_rgb[1] / 255, accent_rgb[2] / 255)),
+            ("BACKGROUND", (0, 0), (-1, 0), accent),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
             ("FONTSIZE", (0, 0), (-1, -1), 10),
             ("LEFTPADDING", (0, 0), (-1, -1), 8),
@@ -453,18 +482,188 @@ def _generate_job_pdf(job, style: str = "modern") -> bytes:
             ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
             ("GRID", (0, 0), (-1, -1), 0.5, colors.lightgrey),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ]
-        info_table.setStyle(TableStyle(info_style))
+        ]))
         elements.append(info_table)
         elements.append(Spacer(1, 12))
 
-    if job.description:
-        elements.append(Paragraph("<b>Description</b>", heading_style))
-        elements.append(Paragraph(job.description.replace("\n", "<br/>"), body_style))
+    if description:
+        elements.append(Paragraph("<b>Описание</b>", heading_style))
+        elements.append(Paragraph(description, body_style))
 
     doc.build(elements)
-    buf.seek(0)
-    return buf.getvalue()
+
+
+def _build_classic_job_pdf(buf, job, info_rows, description, primary, accent, text_color):
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4, topMargin=2 * cm, bottomMargin=2 * cm,
+        leftMargin=2.2 * cm, rightMargin=2.2 * cm,
+    )
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle("CTitle", parent=styles["Title"], fontName="Times-Bold", fontSize=20, textColor=primary, alignment=1, spaceAfter=4)
+    sub_style = ParagraphStyle("CSub", parent=styles["Normal"], fontName="Times-Roman", fontSize=11, textColor=accent, alignment=1, spaceAfter=10)
+    heading_style = ParagraphStyle("CHeading", parent=styles["Heading2"], fontName="Times-Bold", fontSize=12, textColor=primary, spaceBefore=12, spaceAfter=6)
+    body_style = ParagraphStyle("CBody", parent=styles["BodyText"], fontName="Times-Roman", fontSize=11, leading=15, textColor=text_color)
+
+    elements = []
+    elements.append(Paragraph(job.title, title_style))
+    if getattr(job, "employer_name", None):
+        elements.append(Paragraph(str(job.employer_name), sub_style))
+    elements.append(HRFlowable(width="100%", thickness=1.5, color=primary, spaceAfter=10))
+
+    if info_rows:
+        data = [["Параметр", "Значение"]]
+        data += [[label, str(value)] for label, value in info_rows]
+        table = Table(data, colWidths=[4.5 * cm, doc.width - 4.5 * cm])
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), primary),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Times-Bold"),
+            ("FONTNAME", (0, 1), (0, -1), "Times-Bold"),
+            ("FONTNAME", (1, 1), (1, -1), "Times-Roman"),
+            ("FONTSIZE", (0, 0), (-1, -1), 10),
+            ("GRID", (0, 0), (-1, -1), 0.8, primary),
+            ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#FAFAFA")),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F3F4F6")]),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]))
+        elements.append(table)
+
+    if description:
+        elements.append(Paragraph("Описание вакансии", heading_style))
+        elements.append(Paragraph(description, body_style))
+
+    doc.build(elements)
+
+
+def _build_minimal_job_pdf(buf, job, info_rows, description, primary, accent, text_color):
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4, topMargin=2.2 * cm, bottomMargin=2 * cm,
+        leftMargin=2.5 * cm, rightMargin=2.5 * cm,
+    )
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle("MinTitle", parent=styles["Normal"], fontName="Helvetica-Bold", fontSize=16, textColor=primary, leading=20, spaceAfter=4)
+    heading_style = ParagraphStyle("MinHeading", parent=styles["Normal"], fontName="Helvetica-Bold", fontSize=9, textColor=accent, leading=12, spaceBefore=14, spaceAfter=6)
+    body_style = ParagraphStyle("MinBody", parent=styles["BodyText"], fontName="Helvetica", fontSize=9.5, leading=13.5, textColor=text_color)
+    label_style = ParagraphStyle("MinLabel", parent=styles["Normal"], fontName="Helvetica", fontSize=9, textColor=colors.HexColor("#6B7280"), leading=12)
+    value_style = ParagraphStyle("MinValue", parent=styles["Normal"], fontName="Helvetica", fontSize=9.5, textColor=text_color, leading=12)
+
+    elements = []
+    elements.append(Paragraph(job.title, title_style))
+    elements.append(HRFlowable(width="100%", thickness=0.6, color=colors.HexColor("#D1D5DB"), spaceBefore=6, spaceAfter=8))
+
+    if info_rows:
+        data = []
+        for label, value in info_rows:
+            data.append([Paragraph(label.upper(), label_style), Paragraph(str(value), value_style)])
+        table = Table(data, colWidths=[4 * cm, doc.width - 4 * cm])
+        table.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("LINEBELOW", (0, 0), (-1, -2), 0.3, colors.HexColor("#E5E7EB")),
+        ]))
+        elements.append(table)
+
+    if description:
+        elements.append(Paragraph("ОПИСАНИЕ", heading_style))
+        elements.append(Paragraph(description, body_style))
+
+    doc.build(elements)
+
+
+def _build_creative_job_pdf(buf, job, info_rows, description, primary, accent, text_color):
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER
+
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4, topMargin=1.2 * cm, bottomMargin=1.5 * cm,
+        leftMargin=0, rightMargin=0,
+    )
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "CrTitle", parent=styles["Title"], fontName="Helvetica-Bold",
+        fontSize=22, textColor=colors.white, alignment=TA_CENTER, leading=26, spaceAfter=4,
+    )
+    sub_style = ParagraphStyle("CrSub", parent=styles["Normal"], fontSize=11, textColor=colors.white, alignment=TA_CENTER)
+    heading_style = ParagraphStyle("CrHeading", parent=styles["Heading2"], fontSize=13, textColor=primary, spaceBefore=12, spaceAfter=6)
+    body_style = ParagraphStyle("CrBody", parent=styles["BodyText"], fontSize=10, leading=14, textColor=text_color)
+
+    elements = []
+    hero = Table(
+        [[Paragraph(f"<b>{job.title}</b>", title_style)],
+         [Paragraph(str(getattr(job, "employer_name", "") or "Вакансия"), sub_style)]],
+        colWidths=[doc.width],
+    )
+    hero.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), primary),
+        ("TOPPADDING", (0, 0), (-1, 0), 18),
+        ("BOTTOMPADDING", (0, -1), (-1, -1), 18),
+        ("LEFTPADDING", (0, 0), (-1, -1), 20),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 20),
+    ]))
+    elements.append(hero)
+
+    inner_left = 1.2 * cm
+    if info_rows:
+        badge_rows = []
+        for label, value in info_rows:
+            badge_rows.append([
+                Paragraph(f"<font color='{primary.hexval()}'><b>{label}</b></font>", body_style),
+                Paragraph(str(value), body_style),
+            ])
+        table = Table(badge_rows, colWidths=[4 * cm, doc.width - 4 * cm - 2 * inner_left])
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#FFF7ED")),
+            ("BOX", (0, 0), (-1, -1), 1, accent),
+            ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#FDE68A")),
+            ("TOPPADDING", (0, 0), (-1, -1), 7),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]))
+        wrap = Table([[table]], colWidths=[doc.width])
+        wrap.setStyle(TableStyle([
+            ("LEFTPADDING", (0, 0), (-1, -1), inner_left),
+            ("RIGHTPADDING", (0, 0), (-1, -1), inner_left),
+            ("TOPPADDING", (0, 0), (-1, -1), 14),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(wrap)
+
+    if description:
+        desc_block = [
+            Paragraph(f"<font color='{primary.hexval()}'><b>Описание</b></font>", heading_style),
+            Paragraph(description, body_style),
+        ]
+        desc_wrap = Table([[desc_block]], colWidths=[doc.width])
+        desc_wrap.setStyle(TableStyle([
+            ("LEFTPADDING", (0, 0), (-1, -1), inner_left),
+            ("RIGHTPADDING", (0, 0), (-1, -1), inner_left),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(desc_wrap)
+
+    doc.build(elements)
 
 
 def _generate_resume_pdf(resume, student_profile=None, user=None, style: str = "modern") -> bytes:

@@ -2,38 +2,40 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Briefcase, Building2, Twitter, Linkedin, Github, Mail } from 'lucide-react';
+import { Building2, Twitter, Linkedin, Github, Mail } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { useI18n } from '@/i18n/I18nContext';
 
 export default function Footer() {
   const pathname = usePathname();
   const currentYear = new Date().getFullYear();
   const { user } = useAuth();
+  const { t } = useI18n();
 
   if (pathname === '/chat') return null;
 
   const footerLinks = {
     product: [
-      { label: 'Вакансии', href: '/jobs' },
-      { label: 'Компании', href: '/companies' },
-      { label: 'Стажировки', href: '/jobs?category=internship' },
-      { label: 'Удаленная работа', href: '/jobs?work_format=remote' },
+      { label: t('nav.jobs'), href: '/jobs' },
+      { label: t('nav.companies'), href: '/companies' },
+      { label: t('footer.internships'), href: '/jobs?category=internship' },
+      { label: t('footer.remoteWork'), href: '/jobs?work_format=remote' },
     ],
     company: [
-      { label: 'О нас', href: '/about' },
-      { label: 'Блог', href: '/blog' },
-      { label: 'Карьера', href: '/jobs?company=careerhub' },
+      { label: t('footer.about'), href: '/about' },
+      { label: t('nav.blog'), href: '/blog' },
+      { label: t('footer.careers'), href: '/jobs?company=careerhub' },
     ],
     forEmployers: [
-      { label: 'Разместить вакансию', href: '/employer/create-job' },
-      { label: 'Поиск кандидатов', href: '/employer/search' },
-      { label: 'Тарифы', href: '/pricing' },
+      { label: t('footer.postJob'), href: '/employer/create-job' },
+      { label: t('footer.findCandidates'), href: '/employer/search' },
+      { label: t('footer.pricing'), href: '/pricing' },
     ],
     support: [
-      { label: 'Помощь', href: '/help' },
-      { label: 'Контакты', href: '/contact' },
-      { label: 'Политика конфиденциальности', href: '/privacy' },
-      { label: 'Условия использования', href: '/terms' },
+      { label: t('footer.help'), href: '/help' },
+      { label: t('footer.contact'), href: '/contact' },
+      { label: t('footer.privacy'), href: '/privacy' },
+      { label: t('footer.terms'), href: '/terms' },
     ],
   };
 
@@ -49,16 +51,14 @@ export default function Footer() {
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-8 sm:py-12 lg:py-16">
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8 lg:gap-12 mb-12">
           <div className="col-span-2 lg:col-span-1">
-            <Link href="/" className="flex items-center gap-2.5 mb-4" aria-label="CareerHub - главная">
-              <div className="w-9 h-9 rounded-lg bg-accent-primary flex items-center justify-center">
-                <Briefcase className="text-text-on-accent" size={18} />
-              </div>
+            <Link href="/" className="flex items-center gap-2.5 mb-4" aria-label={`${t('common.appName')} - ${t('footer.home')}`}>
+              <img src="/logo.svg" alt={t('common.appName')} className="w-9 h-9 rounded-lg" />
               <span className="font-heading text-heading-md text-text-primary tracking-tight font-semibold">
                 CareerHub
               </span>
             </Link>
             <p className="font-body text-body-sm text-text-muted mb-6 max-w-xs">
-              Премиальная платформа для поиска работы и стажировок. Соединяем таланты с лучшими компаниями.
+              {t('footer.tagline')}
             </p>
             <div className="flex gap-3">
               {socialLinks.map((social) => (
@@ -76,8 +76,8 @@ export default function Footer() {
             </div>
           </div>
 
-          <nav aria-label="Продукт">
-            <h3 className="section-title mb-4">Продукт</h3>
+          <nav aria-label={t('footer.product')}>
+            <h3 className="section-title mb-4">{t('footer.product')}</h3>
             <ul className="space-y-3">
               {footerLinks.product.map((link) => (
                 <li key={link.href}>
@@ -92,8 +92,8 @@ export default function Footer() {
             </ul>
           </nav>
 
-          <nav aria-label="Компания">
-            <h3 className="section-title mb-4">Компания</h3>
+          <nav aria-label={t('nav.companies')}>
+            <h3 className="section-title mb-4">{t('nav.companies')}</h3>
             <ul className="space-y-3">
               {footerLinks.company.map((link) => (
                 <li key={link.href}>
@@ -109,8 +109,8 @@ export default function Footer() {
           </nav>
 
           {user?.role === 'employer' && (
-            <nav aria-label="Работодателям">
-              <h3 className="section-title mb-4">Работодателям</h3>
+            <nav aria-label={t('footer.forEmployers')}>
+              <h3 className="section-title mb-4">{t('footer.forEmployers')}</h3>
               <ul className="space-y-3">
                 {footerLinks.forEmployers.map((link) => (
                   <li key={link.href}>
@@ -126,8 +126,8 @@ export default function Footer() {
             </nav>
           )}
 
-          <nav aria-label="Поддержка">
-            <h3 className="section-title mb-4">Поддержка</h3>
+          <nav aria-label={t('footer.support')}>
+            <h3 className="section-title mb-4">{t('footer.support')}</h3>
             <ul className="space-y-3">
               {footerLinks.support.map((link) => (
                 <li key={link.href}>
@@ -146,20 +146,20 @@ export default function Footer() {
         <div className="pt-8 border-t border-border-default">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <p className="font-body text-caption text-text-subtle">
-              © {currentYear} CareerHub. Все права защищены.
+              © {currentYear} CareerHub. {t('footer.rights')}.
             </p>
             <div className="flex items-center gap-6">
               <Link
                 href="/privacy"
                 className="font-body text-caption text-text-subtle hover:text-text-primary transition-colors duration-150"
               >
-                Политика конфиденциальности
+                {t('footer.privacy')}
               </Link>
               <Link
                 href="/terms"
                 className="font-body text-caption text-text-subtle hover:text-text-primary transition-colors duration-150"
               >
-                Условия использования
+                {t('footer.terms')}
               </Link>
             </div>
           </div>

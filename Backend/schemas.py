@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 
 # ──────────────────────────── Auth ────────────────────────────
@@ -590,7 +590,16 @@ class ChatSessionCreate(BaseModel):
 
 class ChatMessageCreate(BaseModel):
     session_id: Optional[int] = None
-    content: str
+    content: Optional[str] = None
+    message: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _normalize(self) -> "ChatMessageCreate":
+        if not self.content and not self.message:
+            raise ValueError("message or content is required")
+        if not self.content:
+            self.content = self.message
+        return self
 
 
 class ChatMessageResponse(BaseModel):
@@ -603,6 +612,24 @@ class ChatMessageResponse(BaseModel):
     created_at: Optional[datetime] = None
 
 
+class ChatSendResponse(BaseModel):
+    session_id: int
+    session_title: Optional[str] = None
+    user_message: ChatMessageResponse
+    assistant_message: ChatMessageResponse
+
+
+class ChatMessagesResponse(BaseModel):
+    id: int
+    session_id: int
+    title: Optional[str] = None
+    messages: list[ChatMessageResponse] = []
+    messages_count: int = 0
+    last_message: Optional[dict[str, Any]] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
 class ChatSessionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -610,7 +637,7 @@ class ChatSessionResponse(BaseModel):
     title: Optional[str] = None
     messages: list[ChatMessageResponse] = []
     messages_count: int = 0
-    last_message: Optional[str] = None
+    last_message: Optional[dict[str, Any]] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

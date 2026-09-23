@@ -8,9 +8,11 @@ import { useAuth } from '@/hooks/useAuth';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
 import { clsx, getErrorMessage } from '@/lib/utils';
+import { useI18n } from '@/i18n/I18nContext';
 
 export default function RegisterPage() {
   const { register } = useAuth();
+  const { t } = useI18n();
   const router = useRouter();
   const [role, setRole] = useState<'student' | 'employer'>('student');
   const [form, setForm] = useState({
@@ -30,12 +32,12 @@ export default function RegisterPage() {
     setError('');
 
     if (form.password !== form.confirmPassword) {
-      setError('Пароли не совпадают');
+      setError(t('auth.passwordMismatch'));
       return;
     }
 
     if (form.password.length < 6) {
-      setError('Пароль должен содержать минимум 6 символов');
+      setError(t('auth.passwordMin6'));
       return;
     }
 
@@ -61,8 +63,8 @@ export default function RegisterPage() {
             <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
               <img src="/logo.svg" alt="CareerHub" className="w-14 h-14 rounded-2xl" />
             </div>
-            <h1 className="font-heading font-bold text-2xl mb-1.5 text-text-primary">Создать аккаунт</h1>
-            <p className="text-sm text-text-muted">Присоединяйтесь к тысячам студентов</p>
+            <h1 className="font-heading font-bold text-2xl mb-1.5 text-text-primary">{t('auth.createAccount')}</h1>
+            <p className="text-sm text-text-muted">{t('auth.joinStudents')}</p>
           </div>
 
           <div className="grid grid-cols-2 gap-3 mb-6">
@@ -85,9 +87,9 @@ export default function RegisterPage() {
                 <GraduationCap size={20} />
               </div>
               <div className={clsx('text-sm font-semibold', role === 'student' ? 'text-accent-primary' : 'text-text-secondary group-hover:text-text-primary')}>
-                Студент
+                {t('auth.roleStudent')}
               </div>
-              <div className="text-[11px] text-text-muted mt-0.5 hidden sm:block">Ищу работу</div>
+              <div className="text-[11px] text-text-muted mt-0.5 hidden sm:block">{t('auth.findWork')}</div>
             </button>
             <button
               type="button"
@@ -108,9 +110,9 @@ export default function RegisterPage() {
                 <Building2 size={20} />
               </div>
               <div className={clsx('text-sm font-semibold', role === 'employer' ? 'text-accent-primary' : 'text-text-secondary group-hover:text-text-primary')}>
-                Работодатель
+                {t('auth.roleEmployer')}
               </div>
-              <div className="text-[11px] text-text-muted mt-0.5 hidden sm:block">Найти сотрудников</div>
+              <div className="text-[11px] text-text-muted mt-0.5 hidden sm:block">{t('auth.findEmployees')}</div>
             </button>
           </div>
 
@@ -125,7 +127,7 @@ export default function RegisterPage() {
             )}
 
             <Input
-              label="Имя пользователя"
+              label={t('auth.username')}
               placeholder="username"
               value={form.username}
               onChange={(e) => update('username', e.target.value)}
@@ -145,9 +147,9 @@ export default function RegisterPage() {
 
             <div className="relative">
               <Input
-                label="Пароль"
+                label={t('auth.password')}
                 type={showPassword ? 'text' : 'password'}
-                placeholder="Минимум 6 символов"
+                placeholder={t('auth.minChars6')}
                 value={form.password}
                 onChange={(e) => update('password', e.target.value)}
                 icon={<Lock size={16} />}
@@ -164,9 +166,9 @@ export default function RegisterPage() {
             </div>
 
             <Input
-              label="Подтвердите пароль"
+              label={t('auth.confirmPassword')}
               type="password"
-              placeholder="Повторите пароль"
+              placeholder={t('auth.repeatPassword')}
               value={form.confirmPassword}
               onChange={(e) => update('confirmPassword', e.target.value)}
               icon={<Lock size={16} />}
@@ -175,7 +177,7 @@ export default function RegisterPage() {
             />
 
             <Input
-              label="Телефон"
+              label={t('auth.phone')}
               placeholder="+992 (900) 123-45-67"
               value={form.phone}
               onChange={(e) => update('phone', e.target.value)}
@@ -184,8 +186,8 @@ export default function RegisterPage() {
 
             {role === 'employer' && (
               <Input
-                label="Название компании"
-                placeholder="Название вашей компании"
+                label={t('auth.companyName')}
+                placeholder={t('auth.companyNamePlaceholder')}
                 value={form.companyName}
                 onChange={(e) => update('companyName', e.target.value)}
                 icon={<Building2 size={16} />}
@@ -193,7 +195,7 @@ export default function RegisterPage() {
             )}
 
             <Button type="submit" loading={loading} className="w-full mt-2 h-11">
-              Зарегистрироваться
+              {t('auth.registerButton')}
             </Button>
           </form>
 
@@ -202,7 +204,7 @@ export default function RegisterPage() {
               <div className="w-full border-t border-border-default"></div>
             </div>
             <div className="relative flex justify-center text-xs">
-              <span className="px-3 bg-card text-text-muted">или</span>
+              <span className="px-3 bg-card text-text-muted">{t('auth.orDivider')}</span>
             </div>
           </div>
 
@@ -217,13 +219,13 @@ export default function RegisterPage() {
               <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
               <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
             </svg>
-            Зарегистрироваться через Google
+            {t('auth.registerWithGoogle')}
           </button>
 
           <p className="text-center text-sm text-text-muted mt-4">
-            Уже есть аккаунт?{' '}
+            {t('auth.hasAccount')}{' '}
             <Link href="/auth/login" className="text-accent-primary hover:text-accent-primary-hover transition-colors font-semibold">
-              Войти
+              {t('auth.loginButton')}
             </Link>
           </p>
         </div>

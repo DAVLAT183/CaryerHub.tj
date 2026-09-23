@@ -14,12 +14,15 @@ import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
 import Skeleton from '@/components/ui/Skeleton';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import Avatar from '@/components/ui/Avatar';
 import ResumeStyleSelector, { STYLE_OPTIONS } from '@/components/ui/ResumeStyleSelector';
 import ResumeGeneratorModal from '@/components/chat/ResumeGeneratorModal';
 import { formatSchedule, formatWorkFormat, formatResumeStyle, formatDate, showToast, getErrorMessage } from '@/lib/utils';
 import type { StudentProfile, Resume, ResumeStyle } from '@/types';
 
-const STYLE_OPTIONS_MAP = Object.fromEntries(STYLE_OPTIONS.map((o) => [o.value, o]));
+const STYLE_OPTIONS_MAP = Object.fromEntries(
+  STYLE_OPTIONS.map((o: (typeof STYLE_OPTIONS)[number]) => [o.value, o])
+);
 
 interface AIResume {
   title: string;
@@ -298,10 +301,8 @@ export default function StudentProfilePage() {
         <div>
           <div className="card-minimal p-6">
             <div className="text-center mb-6">
-              <div className="w-[72px] h-[72px] rounded-2xl bg-accent-primary flex items-center justify-center mx-auto mb-3">
-                <span className="text-2xl font-bold text-white font-heading">
-                  {user?.username?.charAt(0).toUpperCase()}
-                </span>
+              <div className="mx-auto mb-3 w-[72px] h-[72px]">
+                <Avatar src={user?.avatar} alt={user?.username} size="xl" />
               </div>
               <h2 className="font-heading font-semibold text-[17px] text-text-primary">{user?.username}</h2>
               <p className="text-[13px] text-text-muted mt-0.5">{user?.email}</p>

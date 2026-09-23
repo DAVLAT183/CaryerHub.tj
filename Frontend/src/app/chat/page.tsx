@@ -15,7 +15,7 @@ export default function ChatPage() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
   const userParam = searchParams.get('user');
-  const [tab, setTab] = useState<Tab>(userParam ? 'employer' : 'employer');
+  const [tab, setTab] = useState<Tab>(userParam ? 'employer' : 'ai');
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode; show: boolean }[] = [
     { id: 'ai', label: 'AI Ассистент', icon: <Bot size={16} />, show: true },
