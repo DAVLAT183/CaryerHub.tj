@@ -55,11 +55,32 @@ WORK_FORMATS = [
 ]
 
 WORK_EXPERIENCES = [
-    ("Без опыта", "no_exp"),
-    ("1–3 года", "1-3"),
-    ("3–5 лет", "3-5"),
+    ("Без опыта", "none"),
+    ("1-3 года", "1-3"),
+    ("3-5 лет", "3-5"),
     ("Более 5 лет", "5+"),
 ]
+
+CITY_COORDS = [
+    ("душанб", 38.5598, 68.7870),
+    ("худжанд", 40.2824, 69.6196),
+    ("хорог", 37.4880, 71.5520),
+    ("кулоб", 37.9410, 69.6240),
+    ("бустон", 40.2330, 69.6970),
+    ("таджикистан", 38.8610, 71.2760),
+]
+
+
+def coords_for_location(address: str | None) -> tuple[float | None, float | None]:
+    if not address:
+        return None, None
+    a = address.lower()
+    if "удал" in a or "remote" in a:
+        return None, None
+    for key, lat, lng in CITY_COORDS:
+        if key in a:
+            return lat, lng
+    return None, None
 
 DEMO_PASSWORD = "Demo1234!"
 
@@ -330,25 +351,31 @@ async def ensure_demo_data(db) -> dict:
             stats["tariffs"] += 1
     await db.flush()
 
-    # Work schedules / formats / experiences
-    result = await db.execute(select(WorkSchedule.slug))
-    have_ws = {row[0] for row in result.all()}
+    # Work schedules / formats / experiences (match on name and slug)
+    result = await db.execute(select(WorkSchedule.name, WorkSchedule.slug))
+    have_ws = {(row[0], row[1]) for row in result.all()}
+    have_ws_slugs = {row[1] for row in have_ws}
+    have_ws_names = {row[0] for row in have_ws}
     for name, slug in WORK_SCHEDULES:
-        if slug not in have_ws:
+        if slug not in have_ws_slugs and name not in have_ws_names:
             db.add(WorkSchedule(name=name, slug=slug))
             stats["lookups"] += 1
 
-    result = await db.execute(select(WorkFormat.slug))
-    have_wfmt = {row[0] for row in result.all()}
+    result = await db.execute(select(WorkFormat.name, WorkFormat.slug))
+    have_wfmt = {(row[0], row[1]) for row in result.all()}
+    have_wfmt_slugs = {row[1] for row in have_wfmt}
+    have_wfmt_names = {row[0] for row in have_wfmt}
     for name, slug in WORK_FORMATS:
-        if slug not in have_wfmt:
+        if slug not in have_wfmt_slugs and name not in have_wfmt_names:
             db.add(WorkFormat(name=name, slug=slug))
             stats["lookups"] += 1
 
-    result = await db.execute(select(WorkExperience.slug))
-    have_we = {row[0] for row in result.all()}
+    result = await db.execute(select(WorkExperience.name, WorkExperience.slug))
+    have_we = {(row[0], row[1]) for row in result.all()}
+    have_we_slugs = {row[1] for row in have_we}
+    have_we_names = {row[0] for row in have_we}
     for name, slug in WORK_EXPERIENCES:
-        if slug not in have_we:
+        if slug not in have_we_slugs and name not in have_we_names:
             db.add(WorkExperience(name=name, slug=slug))
             stats["lookups"] += 1
     await db.flush()
@@ -501,17 +528,29 @@ async def ensure_demo_data(db) -> dict:
         if not employer_id or not cat:
             continue
         work_fmt = "offline" if fmt == "remote" else fmt
+        lat, lng = coords_for_location(loc)
         job = Job(
             employer_id=employer_id, category_id=cat.id, title=title,
             description=desc, salary_min=smin, salary_max=smax,
             schedule=sched, work_format=work_fmt, experience_required=exp,
             is_active=True, source="manual", location_address=loc,
+            location_lat=lat, location_lng=lng,
             views_count=views,
         )
         db.add(job)
         jobs_created.append((title, cat_slug, emp_user))
         existing_titles.add(title)
         stats["jobs"] += 1
+    await db.flush()
+
+    # Backfill coordinates for jobs that only have a text address
+    result = await db.execute(select(Job).where(Job.location_lat.is_(None)))
+    for job in result.scalars().all():
+        lat, lng = coords_for_location(job.location_address)
+        if lat is not None:
+            job.location_lat = lat
+            job.location_lng = lng
+            stats["coords"] = stats.get("coords", 0) + 1
     await db.flush()
 
     # Favorites for first student

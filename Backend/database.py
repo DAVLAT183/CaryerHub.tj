@@ -224,13 +224,26 @@ async def init_db():
         ]
 
         demo_jobs = []
+        city_coords = {
+            "Душанбе": (38.5598, 68.7870),
+            "Худжанд": (40.2824, 69.6196),
+            "Хорог": (37.4880, 71.5520),
+        }
         for jd in demo_jobs_data:
+            addr = jd.get("location_address", "")
+            lat = lng = None
+            for city, (la, lo) in city_coords.items():
+                if city in addr:
+                    lat, lng = la, lo
+                    break
             job = Job(
                 employer_id=employer_profile.id,
                 is_active=True,
                 source="manual",
                 source_url="",
                 source_id="",
+                location_lat=lat,
+                location_lng=lng,
                 **jd,
             )
             db.add(job)
