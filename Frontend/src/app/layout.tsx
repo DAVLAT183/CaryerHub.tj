@@ -6,6 +6,7 @@ import { ThemeProvider } from '@/i18n/ThemeContext';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import MiniAIChat from '@/components/chat/MiniAIChat';
+import BackToTop from '@/components/ui/BackToTop';
 import './globals.css';
 
 const inter = Inter({
@@ -43,6 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </main>
               <Footer />
               <MiniAIChat />
+              <BackToTop />
             </AuthProvider>
           </I18nProvider>
         </ThemeProvider>
