@@ -35,6 +35,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from rate_limit import RateLimitMiddleware
+
+app.add_middleware(
+    RateLimitMiddleware,
+    limit=settings.RATE_LIMIT,
+    window=settings.RATE_LIMIT_WINDOW,
+)
+
 from routes_auth import router as auth_router
 from routes_parser import router as parser_router
 from routes_jobs import router as jobs_router
