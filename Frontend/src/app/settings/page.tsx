@@ -42,6 +42,26 @@ export default function SettingsPage() {
     push_jobs: false,
     push_messages: false,
   });
+  const [notifLoading, setNotifLoading] = useState(false);
+  const [notifSaving, setNotifSaving] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    setNotifLoading(true);
+    api.get('/notification-settings/')
+      .then((r) => {
+        const d = r.data;
+        setNotifications({
+          email_jobs: d.email_jobs ?? true,
+          email_applications: d.email_applications ?? true,
+          email_messages: d.email_messages ?? true,
+          push_jobs: d.push_jobs ?? false,
+          push_messages: d.push_messages ?? false,
+        });
+      })
+      .catch(() => {})
+      .finally(() => setNotifLoading(false));
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -105,7 +125,15 @@ export default function SettingsPage() {
   };
 
   const saveNotifications = async () => {
-    showToast('Настройки уведомлений сохранены (требуется backend)', 'info');
+    setNotifSaving(true);
+    try {
+      await api.put('/notification-settings/', notifications);
+      showToast('Настройки уведомлений сохранены', 'success');
+    } catch (err) {
+      showToast(getErrorMessage(err), 'error');
+    } finally {
+      setNotifSaving(false);
+    }
   };
 
   const changePassword = async () => {
@@ -460,7 +488,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="flex items-center gap-3 pt-2">
-                  <Button onClick={saveNotifications} variant="primary">
+                  <Button onClick={saveNotifications} variant="primary" loading={notifSaving} disabled={notifLoading}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
                     Сохранить настройки
                   </Button>
