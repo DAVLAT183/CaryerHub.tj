@@ -1,4 +1,7 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_, desc
 from database import get_db
@@ -226,6 +229,37 @@ async def mark_one_read(
         raise HTTPException(status_code=404, detail="Notification not found")
 
     notif.is_read = True
+    await db.commit()
+    await db.refresh(notif)
+    return notif
+
+
+class NotificationUpdate(BaseModel):
+    is_read: Optional[bool] = None
+
+
+@router.patch("/notifications/{notif_id}/", response_model=NotificationResponse)
+async def update_notification(
+    notif_id: int,
+    payload: NotificationUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    notif = (await db.execute(
+        select(Notification).where(
+            and_(
+                Notification.id == notif_id,
+                Notification.user_id == current_user.id,
+            )
+        )
+    )).scalar_one_or_none()
+
+    if not notif:
+        raise HTTPException(status_code=404, detail="Notification not found")
+
+    if payload.is_read is not None:
+        notif.is_read = payload.is_read
+
     await db.commit()
     await db.refresh(notif)
     return notif
