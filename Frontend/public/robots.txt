@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /auth/
+Disallow: /settings
+Disallow: /profile/
+Disallow: /applications
+Disallow: /favorites
+Disallow: /notifications
+Disallow: /chat
+
+Sitemap: https://careerhub.tj/sitemap.xml
