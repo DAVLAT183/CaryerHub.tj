@@ -155,6 +155,7 @@ class Job(Base):
     source = Column(String(20), default="manual")
     source_url = Column(String(500), default="")
     source_id = Column(String(100), default="")
+    views_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=utcnow)
 
     employer = relationship("EmployerProfile", back_populates="jobs")

@@ -158,6 +158,7 @@ async def _serialize_job(job: Job, db: AsyncSession, applications_count: int = 0
         "source": job.source,
         "source_url": job.source_url,
         "source_id": job.source_id,
+        "views_count": job.views_count or 0,
         "created_at": job.created_at.isoformat() if job.created_at else None,
         "applications_count": applications_count,
         "category": category,
@@ -443,6 +444,100 @@ async def get_job(
     applications_count = app_count_result.scalar() or 0
 
     return await _serialize_job(job, db, applications_count)
+
+
+@router.post("/jobs/{job_id}/view/")
+async def track_job_view(
+    job_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user),
+):
+    result = await db.execute(select(Job).where(Job.id == job_id))
+    job = result.scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    is_owner = False
+    if user:
+        emp = await db.execute(
+            select(EmployerProfile).where(EmployerProfile.user_id == user.id)
+        )
+        emp_profile = emp.scalar_one_or_none()
+        is_owner = emp_profile is not None and emp_profile.id == job.employer_id
+
+    if not is_owner:
+        job.views_count = (job.views_count or 0) + 1
+        await db.commit()
+        await db.refresh(job)
+
+    return {"views_count": job.views_count}
+
+
+@router.get("/jobs/stats/summary/")
+async def jobs_stats_summary(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if user.role != "employer":
+        raise HTTPException(status_code=403, detail="Only employers can view job stats")
+
+    profile = await _get_employer_profile(user, db)
+
+    jobs_result = await db.execute(
+        select(func.count(Job.id), func.coalesce(func.sum(Job.views_count), 0))
+        .where(Job.employer_id == profile.id)
+    )
+    total_jobs, total_views = jobs_result.one()
+
+    active_result = await db.execute(
+        select(func.count(Job.id)).where(
+            Job.employer_id == profile.id, Job.is_active == True
+        )
+    )
+    active_jobs = active_result.scalar() or 0
+
+    app_result = await db.execute(
+        select(func.count(Application.id))
+        .join(Job, Application.job_id == Job.id)
+        .where(Job.employer_id == profile.id)
+    )
+    total_applications = app_result.scalar() or 0
+
+    by_status_result = await db.execute(
+        select(Application.status, func.count(Application.id))
+        .join(Job, Application.job_id == Job.id)
+        .where(Job.employer_id == profile.id)
+        .group_by(Application.status)
+    )
+    applications_by_status = {status_: cnt for status_, cnt in by_status_result.all()}
+
+    top_jobs_result = await db.execute(
+        select(Job)
+        .where(Job.employer_id == profile.id)
+        .order_by((Job.views_count or 0).desc())
+        .limit(5)
+    )
+    top_jobs = [
+        {
+            "id": j.id,
+            "title": j.title,
+            "views_count": j.views_count or 0,
+            "is_active": j.is_active,
+        }
+        for j in top_jobs_result.scalars().all()
+    ]
+
+    conversion = round((total_applications / total_views * 100), 2) if total_views else 0.0
+
+    return {
+        "total_jobs": total_jobs,
+        "active_jobs": active_jobs,
+        "total_views": total_views,
+        "total_applications": total_applications,
+        "applications_by_status": applications_by_status,
+        "view_to_apply_conversion_pct": conversion,
+        "top_jobs": top_jobs,
+    }
 
 
 @router.post("/jobs/")

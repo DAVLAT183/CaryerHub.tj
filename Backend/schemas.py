@@ -236,6 +236,7 @@ class JobSchema(BaseModel):
     source: Optional[str] = None
     source_url: Optional[str] = None
     source_id: Optional[str] = None
+    views_count: int = 0
 
 
 class JobCreateSchema(BaseModel):
