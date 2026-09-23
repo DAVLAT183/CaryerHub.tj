@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import List, Optional
+from datetime import datetime, timezone
 import re as _re
 from database import get_db
 from models import (
@@ -112,6 +113,166 @@ async def change_password(
     current_user.hashed_password = hash_password(payload.new_password)
     await db.commit()
     return {"detail": "Password updated successfully"}
+
+
+@router.get("/users/me/export/")
+async def export_my_data(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from models import Resume, Application, Favorite, Notification, Payment
+
+    student_profile = (await db.execute(
+        select(StudentProfile).where(StudentProfile.user_id == current_user.id)
+    )).scalar_one_or_none()
+    employer_profile = (await db.execute(
+        select(EmployerProfile).where(EmployerProfile.user_id == current_user.id)
+    )).scalar_one_or_none()
+
+    resumes_data = []
+    applications_data = []
+    favorites_data = []
+    jobs_data = []
+
+    if student_profile:
+        resumes = (await db.execute(
+            select(Resume).where(Resume.student_id == student_profile.id)
+        )).scalars().all()
+        resumes_data = [
+            {
+                "id": r.id,
+                "title": r.title,
+                "about": r.about,
+                "skills": r.skills,
+                "schedule_type": r.schedule_type,
+                "work_format": r.work_format,
+                "github_url": r.github_url,
+                "portfolio_url": r.portfolio_url,
+                "linkedin_url": r.linkedin_url,
+                "style": r.style,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+            }
+            for r in resumes
+        ]
+
+        apps = (await db.execute(
+            select(Application).where(
+                Application.resume_id.in_(
+                    select(Resume.id).where(Resume.student_id == student_profile.id)
+                )
+            )
+        )).scalars().all()
+        applications_data = [
+            {
+                "id": a.id,
+                "job_id": a.job_id,
+                "resume_id": a.resume_id,
+                "status": a.status,
+                "cover_letter": a.cover_letter,
+                "created_at": a.created_at.isoformat() if a.created_at else None,
+            }
+            for a in apps
+        ]
+
+        favs = (await db.execute(
+            select(Favorite).where(Favorite.student_id == student_profile.id)
+        )).scalars().all()
+        favorites_data = [
+            {"job_id": f.job_id, "created_at": f.created_at.isoformat() if f.created_at else None}
+            for f in favs
+        ]
+
+    if employer_profile:
+        jobs = (await db.execute(
+            select(Job).where(Job.employer_id == employer_profile.id)
+        )).scalars().all()
+        jobs_data = [
+            {
+                "id": j.id,
+                "title": j.title,
+                "description": j.description,
+                "salary_min": j.salary_min,
+                "salary_max": j.salary_max,
+                "schedule": j.schedule,
+                "work_format": j.work_format,
+                "is_active": j.is_active,
+                "views_count": j.views_count or 0,
+                "created_at": j.created_at.isoformat() if j.created_at else None,
+            }
+            for j in jobs
+        ]
+
+    notifications = (await db.execute(
+        select(Notification).where(Notification.user_id == current_user.id)
+    )).scalars().all()
+    notifications_data = [
+        {
+            "id": n.id,
+            "type": n.notification_type,
+            "title": n.title,
+            "message": n.message,
+            "is_read": n.is_read,
+            "created_at": n.created_at.isoformat() if n.created_at else None,
+        }
+        for n in notifications
+    ]
+
+    payments = (await db.execute(
+        select(Payment).where(Payment.user_id == current_user.id)
+    )).scalars().all()
+    payments_data = [
+        {
+            "invoice_no": p.invoice_no,
+            "amount": p.amount,
+            "status": p.status,
+            "payment_method": p.payment_method,
+            "paid_at": p.paid_at.isoformat() if p.paid_at else None,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+        }
+        for p in payments
+    ]
+
+    return {
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "profile": {
+            "id": current_user.id,
+            "username": current_user.username,
+            "email": current_user.email,
+            "first_name": current_user.first_name,
+            "last_name": current_user.last_name,
+            "role": current_user.role,
+            "phone": current_user.phone,
+            "location": current_user.location,
+            "avatar": current_user.avatar,
+            "is_email_verified": current_user.is_email_verified,
+            "current_plan": current_user.current_plan,
+            "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
+        },
+        "student_profile": {
+            "university": student_profile.university,
+            "faculty": student_profile.faculty,
+            "course": student_profile.course,
+            "birth_date": student_profile.birth_date,
+            "age": student_profile.age,
+            "city": student_profile.city,
+            "views_count": student_profile.views_count or 0,
+        } if student_profile else None,
+        "employer_profile": {
+            "company_name": employer_profile.company_name,
+            "description": employer_profile.description,
+            "website": employer_profile.website,
+            "address": employer_profile.address,
+            "is_verified": employer_profile.is_verified,
+            "views_count": employer_profile.views_count or 0,
+        } if employer_profile else None,
+        "resumes": resumes_data,
+        "applications": applications_data,
+        "favorites": favorites_data,
+        "jobs": jobs_data,
+        "notifications": notifications_data,
+        "payments": payments_data,
+    }
 
 
 @router.get("/student-profiles/", response_model=List[StudentProfileResponse])
