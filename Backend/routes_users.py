@@ -363,7 +363,11 @@ async def track_employer_profile_view(
     return {"views_count": profile.views_count}
 
 
-@router.put("/student-profiles/{profile_id}", response_model=StudentProfileResponse)
+@router.api_route(
+    "/student-profiles/{profile_id}",
+    methods=["PUT", "PATCH"],
+    response_model=StudentProfileResponse,
+)
 async def update_student_profile(
     profile_id: int,
     profile_data: StudentProfileCreate,
@@ -378,7 +382,7 @@ async def update_student_profile(
         raise HTTPException(status_code=404, detail="Student profile not found")
     if profile.user_id != current_user.id and not current_user.is_staff:
         raise HTTPException(status_code=403, detail="Not authorized to update this profile")
-    for field, value in profile_data.model_dump().items():
+    for field, value in profile_data.model_dump(exclude_unset=True).items():
         setattr(profile, field, value)
     await db.commit()
     await db.refresh(profile)
@@ -451,7 +455,11 @@ async def create_employer_profile(
     return profile
 
 
-@router.put("/employer-profiles/{profile_id}", response_model=EmployerProfileResponse)
+@router.api_route(
+    "/employer-profiles/{profile_id}",
+    methods=["PUT", "PATCH"],
+    response_model=EmployerProfileResponse,
+)
 async def update_employer_profile(
     profile_id: int,
     profile_data: EmployerProfileCreate,
@@ -466,7 +474,7 @@ async def update_employer_profile(
         raise HTTPException(status_code=404, detail="Employer profile not found")
     if profile.user_id != current_user.id and not current_user.is_staff:
         raise HTTPException(status_code=403, detail="Not authorized to update this profile")
-    for field, value in profile_data.model_dump().items():
+    for field, value in profile_data.model_dump(exclude_unset=True).items():
         setattr(profile, field, value)
     await db.commit()
     await db.refresh(profile)
