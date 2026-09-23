@@ -14,6 +14,7 @@ import Textarea from '@/components/ui/Textarea';
 import Select from '@/components/ui/Select';
 import Skeleton from '@/components/ui/Skeleton';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import ReadingProgress from '@/components/ui/ReadingProgress';
 import ResumeStyleSelector, { STYLE_OPTIONS } from '@/components/ui/ResumeStyleSelector';
 
 const STYLE_OPTIONS_MAP = Object.fromEntries(STYLE_OPTIONS.map((o) => [o.value, o]));
@@ -324,6 +325,7 @@ export default function JobDetailPage() {
 
   return (
     <div className="max-w-[1280px] mx-auto px-6 py-8">
+      <ReadingProgress />
       <Breadcrumbs
         items={[
           { label: 'Вакансии', href: '/jobs' },
