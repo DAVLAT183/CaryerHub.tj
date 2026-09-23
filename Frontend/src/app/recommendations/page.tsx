@@ -9,6 +9,7 @@ import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Skeleton from '@/components/ui/Skeleton';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import { formatSalary, formatSchedule, formatWorkFormat, formatDate, showToast, getErrorMessage } from '@/lib/utils';
 import type { Job } from '@/types';
 
@@ -67,6 +68,13 @@ export default function RecommendationsPage() {
 
   return (
     <div className="max-w-[1280px] mx-auto px-6 py-8">
+      <Breadcrumbs
+        items={[
+          { label: 'Профиль', href: '/profile/student' },
+          { label: 'Рекомендации ИИ' },
+        ]}
+        className="mb-3"
+      />
       <Link href="/profile/student" className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-white transition-colors mb-6">
         <ArrowLeft size={14} />
         К профилю

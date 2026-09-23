@@ -8,6 +8,7 @@ import Badge from '@/components/ui/Badge';
 import Card from '@/components/ui/Card';
 import Select from '@/components/ui/Select';
 import Skeleton from '@/components/ui/Skeleton';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import { formatDate, formatStatus, clsx, showToast, getErrorMessage } from '@/lib/utils';
 import type { Application } from '@/types';
 
@@ -52,6 +53,12 @@ export default function ApplicationsPage() {
 
   return (
     <div className="max-w-[1280px] mx-auto px-6 py-8">
+      <Breadcrumbs
+        items={[
+          { label: user?.role === 'student' ? 'Мои отклики' : 'Отклики на вакансии' },
+        ]}
+        className="mb-3"
+      />
       <h1 className="font-heading font-bold text-2xl md:text-3xl mb-6">
         {user?.role === 'student' ? 'Мои отклики' : 'Отклики на вакансии'}
       </h1>

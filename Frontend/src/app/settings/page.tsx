@@ -10,6 +10,7 @@ import Textarea from '@/components/ui/Textarea';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Skeleton from '@/components/ui/Skeleton';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import { showToast, getErrorMessage } from '@/lib/utils';
 import type { StudentProfile } from '@/types';
 
@@ -136,6 +137,7 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <Breadcrumbs items={[{ label: 'Настройки' }]} className="mb-3" />
       <h1 className="font-heading font-bold text-xl sm:text-2xl md:text-3xl mb-4 sm:mb-6">Настройки</h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">

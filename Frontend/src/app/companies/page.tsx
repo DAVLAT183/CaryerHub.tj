@@ -7,6 +7,7 @@ import api from '@/lib/api';
 import Card from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
 import Skeleton from '@/components/ui/Skeleton';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import { showToast, getErrorMessage } from '@/lib/utils';
 import type { EmployerProfile } from '@/types';
 
@@ -49,6 +50,7 @@ export default function CompaniesPage() {
   return (
     <div className="min-h-screen bg-bg-primary">
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        <Breadcrumbs items={[{ label: 'Компании' }]} className="mb-3" />
         <div className="mb-8 animate-fade-in">
           <h1 className="font-heading text-display-md text-text-primary tracking-tight font-semibold">
             Компании

@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import JobFilters from '@/components/jobs/JobFilters';
 import JobCard from '@/components/jobs/JobCard';
 import Card from '@/components/ui/Card';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import { showToast, getErrorMessage } from '@/lib/utils';
 import type { Job, PaginatedResponse } from '@/types';
 
@@ -130,6 +131,7 @@ export default function JobsPage() {
   return (
     <div className="min-h-screen bg-bg-primary">
       <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        <Breadcrumbs items={[{ label: 'Вакансии' }]} className="mb-3" />
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center justify-between gap-4 flex-wrap">

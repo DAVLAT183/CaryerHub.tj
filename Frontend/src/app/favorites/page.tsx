@@ -5,6 +5,7 @@ import { Heart } from 'lucide-react';
 import api from '@/lib/api';
 import JobGrid from '@/components/jobs/JobGrid';
 import Skeleton from '@/components/ui/Skeleton';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import { showToast, getErrorMessage } from '@/lib/utils';
 import type { Job } from '@/types';
 
@@ -57,6 +58,7 @@ export default function FavoritesPage() {
 
   return (
     <div className="max-w-[1280px] mx-auto px-6 py-8">
+      <Breadcrumbs items={[{ label: 'Избранное' }]} className="mb-3" />
       <h1 className="font-heading font-bold text-2xl md:text-3xl mb-6">Избранное</h1>
 
       {jobs.length === 0 ? (

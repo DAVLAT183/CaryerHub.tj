@@ -13,6 +13,7 @@ import Card from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
 import Skeleton from '@/components/ui/Skeleton';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import ResumeStyleSelector, { STYLE_OPTIONS } from '@/components/ui/ResumeStyleSelector';
 import ResumeGeneratorModal from '@/components/chat/ResumeGeneratorModal';
 import { formatSchedule, formatWorkFormat, formatResumeStyle, formatDate, showToast, getErrorMessage } from '@/lib/utils';
@@ -228,6 +229,10 @@ export default function StudentProfilePage() {
 
   return (
     <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <Breadcrumbs
+        items={[{ label: 'Профиль', href: '/profile' }, { label: 'Студент' }]}
+        className="mb-3"
+      />
       <h1 className="font-heading font-bold text-xl sm:text-[28px] text-text-primary tracking-tight mb-6 sm:mb-8">Мой профиль</h1>
 
       {/* Profile Completion Prompt */}

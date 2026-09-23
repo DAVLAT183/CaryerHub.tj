@@ -8,6 +8,7 @@ import api from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
 import Card from '@/components/ui/Card';
 import Skeleton from '@/components/ui/Skeleton';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import JobCard from '@/components/jobs/JobCard';
 import { showToast, getErrorMessage } from '@/lib/utils';
 import type { EmployerProfile, Job } from '@/types';
@@ -74,6 +75,13 @@ export default function CompanyDetailPage() {
   return (
     <div className="min-h-screen bg-bg-primary">
       <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        <Breadcrumbs
+          items={[
+            { label: 'Компании', href: '/companies' },
+            { label: company.company_name || 'Компания' },
+          ]}
+          className="mb-3"
+        />
         <Card className="mb-6 sm:mb-8 animate-fade-in overflow-hidden">
           <div className="p-6 lg:p-8">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">

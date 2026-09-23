@@ -7,6 +7,7 @@ import api from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
 import Avatar from '@/components/ui/Avatar';
 import Skeleton from '@/components/ui/Skeleton';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import { formatDate, clsx, showToast, getErrorMessage } from '@/lib/utils';
 import type { Notification } from '@/types';
 
@@ -80,6 +81,7 @@ export default function NotificationsPage() {
 
   return (
     <div className="max-w-[1280px] mx-auto px-6 py-8">
+      <Breadcrumbs items={[{ label: 'Уведомления' }]} className="mb-3" />
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6">
         <h1 className="font-heading font-bold text-2xl md:text-3xl">
           Уведомления

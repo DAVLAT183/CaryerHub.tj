@@ -10,6 +10,7 @@ import Textarea from '@/components/ui/Textarea';
 import Select from '@/components/ui/Select';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import { showToast, getErrorMessage } from '@/lib/utils';
 import type { Category } from '@/types';
 
@@ -62,6 +63,13 @@ export default function CreateJobPage() {
 
   return (
     <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <Breadcrumbs
+        items={[
+          { label: 'Профиль', href: '/profile/employer' },
+          { label: 'Создать вакансию' },
+        ]}
+        className="mb-3"
+      />
       <Link href="/jobs" className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-white transition-colors mb-6">
         <ArrowLeft size={14} />
         Ко всем вакансиям

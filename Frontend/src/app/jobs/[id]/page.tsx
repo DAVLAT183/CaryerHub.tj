@@ -13,6 +13,7 @@ import Modal from '@/components/ui/Modal';
 import Textarea from '@/components/ui/Textarea';
 import Select from '@/components/ui/Select';
 import Skeleton from '@/components/ui/Skeleton';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import ResumeStyleSelector, { STYLE_OPTIONS } from '@/components/ui/ResumeStyleSelector';
 
 const STYLE_OPTIONS_MAP = Object.fromEntries(STYLE_OPTIONS.map((o) => [o.value, o]));
@@ -323,6 +324,13 @@ export default function JobDetailPage() {
 
   return (
     <div className="max-w-[1280px] mx-auto px-6 py-8">
+      <Breadcrumbs
+        items={[
+          { label: 'Вакансии', href: '/jobs' },
+          { label: job.title },
+        ]}
+        className="mb-4"
+      />
       <Link href="/jobs" className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-white transition-colors mb-4 sm:mb-6">
         <ArrowLeft size={14} />
         Ко всем вакансиям

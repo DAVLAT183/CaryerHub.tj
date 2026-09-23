@@ -12,6 +12,7 @@ import Badge from '@/components/ui/Badge';
 import Skeleton from '@/components/ui/Skeleton';
 import Modal from '@/components/ui/Modal';
 import Select from '@/components/ui/Select';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import { formatSchedule, formatWorkFormat, showToast, getErrorMessage } from '@/lib/utils';
 import type { EmployerProfile, Job, Category } from '@/types';
 
@@ -175,6 +176,10 @@ export default function EmployerProfilePage() {
 
   return (
     <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <Breadcrumbs
+        items={[{ label: 'Профиль', href: '/profile' }, { label: 'Работодатель' }]}
+        className="mb-3"
+      />
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <h1 className="font-heading font-bold text-xl sm:text-2xl md:text-3xl">Профиль работодателя</h1>
         <div className="flex gap-2 flex-wrap">
