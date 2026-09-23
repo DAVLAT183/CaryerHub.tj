@@ -55,6 +55,7 @@ class StudentProfile(Base):
     birth_date = Column(String(10), nullable=True)
     age = Column(Integer, nullable=True)
     city = Column(String(100), default="")
+    views_count = Column(Integer, default=0)
 
     user = relationship("User", back_populates="student_profile")
     resumes = relationship("Resume", back_populates="student")
@@ -71,6 +72,7 @@ class EmployerProfile(Base):
     website = Column(String(500), default="")
     address = Column(String(300), default="")
     is_verified = Column(Boolean, default=False)
+    views_count = Column(Integer, default=0)
 
     user = relationship("User", back_populates="employer_profile")
     jobs = relationship("Job", back_populates="employer")

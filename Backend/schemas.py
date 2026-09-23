@@ -464,6 +464,7 @@ class StudentProfileResponse(BaseModel):
     birth_date: Optional[str] = None
     age: Optional[int] = None
     city: Optional[str] = None
+    views_count: int = 0
 
 
 class EmployerProfileCreate(BaseModel):
@@ -483,6 +484,7 @@ class EmployerProfileResponse(BaseModel):
     website: Optional[str] = None
     address: Optional[str] = None
     is_verified: bool = False
+    views_count: int = 0
 
 
 # ──────────────────────────── Category ────────────────────────────

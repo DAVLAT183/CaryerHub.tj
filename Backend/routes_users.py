@@ -162,6 +162,46 @@ async def create_student_profile(
     return profile
 
 
+@router.post("/student-profiles/{profile_id}/view/")
+async def track_student_profile_view(
+    profile_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    profile = (await db.execute(
+        select(StudentProfile).where(StudentProfile.id == profile_id)
+    )).scalar_one_or_none()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Student profile not found")
+
+    if profile.user_id != current_user.id:
+        profile.views_count = (profile.views_count or 0) + 1
+        await db.commit()
+        await db.refresh(profile)
+
+    return {"views_count": profile.views_count}
+
+
+@router.post("/employer-profiles/{profile_id}/view/")
+async def track_employer_profile_view(
+    profile_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    profile = (await db.execute(
+        select(EmployerProfile).where(EmployerProfile.id == profile_id)
+    )).scalar_one_or_none()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Employer profile not found")
+
+    if profile.user_id != current_user.id:
+        profile.views_count = (profile.views_count or 0) + 1
+        await db.commit()
+        await db.refresh(profile)
+
+    return {"views_count": profile.views_count}
+
+
 @router.put("/student-profiles/{profile_id}", response_model=StudentProfileResponse)
 async def update_student_profile(
     profile_id: int,
