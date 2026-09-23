@@ -15,10 +15,35 @@ async def get_db():
         yield session
 
 
+async def _ensure_columns(conn):
+    """SQLite does not ALTER TABLE on create_all — add columns missing from older DBs."""
+    from sqlalchemy import text, inspect
+
+    def _run(sync_conn):
+        inspector = inspect(sync_conn)
+        wanted = {
+            "jobs": {"views_count": "INTEGER DEFAULT 0"},
+            "student_profiles": {"views_count": "INTEGER DEFAULT 0"},
+            "employer_profiles": {"views_count": "INTEGER DEFAULT 0"},
+        }
+        for table, columns in wanted.items():
+            if table not in inspector.get_table_names():
+                continue
+            existing = {c["name"] for c in inspector.get_columns(table)}
+            for name, ddl_type in columns.items():
+                if name not in existing:
+                    sync_conn.execute(
+                        text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl_type}")
+                    )
+
+    await conn.run_sync(_run)
+
+
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
+        await _ensure_columns(conn)
+
     # Seed demo data after tables are created
     from models import User, StudentProfile, EmployerProfile, Category, Job, Resume, TariffPlan, UserSubscription, Favorite, Notification
     from sqlalchemy import select, func

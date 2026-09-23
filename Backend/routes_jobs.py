@@ -378,6 +378,17 @@ async def list_jobs(
     else:
         query = select(Job).where(Job.is_active == True)
 
+    app_count = (
+        select(Application.job_id, func.count(Application.id).label("cnt"))
+        .group_by(Application.job_id)
+        .subquery()
+    )
+
+    count_base = query
+    query = (
+        select(Job, func.coalesce(app_count.c.cnt, 0).label("applications_count"))
+        .outerjoin(app_count, Job.id == app_count.c.job_id)
+    )
     if category:
         query = query.join(Category, Job.category_id == Category.id, isouter=True).where(
             Category.slug == category
@@ -393,25 +404,15 @@ async def list_jobs(
             Job.title.ilike(f"%{search}%") | Job.description.ilike(f"%{search}%")
         )
 
-    app_count = (
-        select(Application.job_id, func.count(Application.id).label("cnt"))
-        .group_by(Application.job_id)
-        .subquery()
-    )
-
-    query = query.outerjoin(app_count, Job.id == app_count.c.job_id)
-
     if ordering == "salary_max":
         query = query.order_by(Job.salary_max.desc().nullslast())
     elif ordering == "salary_min":
         query = query.order_by(Job.salary_min.desc().nullslast())
-    elif ordering == "created_at":
-        query = query.order_by(Job.created_at.desc())
     else:
         query = query.order_by(Job.created_at.desc())
 
     count_q = select(func.count()).select_from(
-        select(Job).where(query.whereclause if query.whereclause else True).subquery()
+        count_base.with_only_columns(Job.id).subquery()
     )
     total = (await db.execute(count_q)).scalar() or 0
 
@@ -423,7 +424,10 @@ async def list_jobs(
     return {
         "count": total,
         "page": page,
-        "results": [await _serialize_job(job, db, count) for job, count in rows],
+        "results": [
+            await _serialize_job(job, db, applications_count or 0)
+            for job, applications_count in rows
+        ],
     }
 
 

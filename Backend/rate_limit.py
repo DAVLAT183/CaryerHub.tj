@@ -64,12 +64,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         if not self._allow(key, limit, window):
             logger.warning("Rate limit exceeded for %s on %s", ip, path)
+            headers = {"Retry-After": str(window)}
+            origin = request.headers.get("origin")
+            if origin:
+                headers["Access-Control-Allow-Origin"] = origin
+                headers["Access-Control-Allow-Credentials"] = "true"
+                headers["Vary"] = "Origin"
             return JSONResponse(
                 status_code=429,
                 content={
                     "detail": "Too many requests. Please slow down and try again later."
                 },
-                headers={"Retry-After": str(window)},
+                headers=headers,
             )
 
         return await call_next(request)

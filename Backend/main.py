@@ -1,8 +1,9 @@
 import logging
 import json
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from config import settings
 from database import init_db
 from scheduler import setup_scheduler
@@ -27,13 +28,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
 
 from rate_limit import RateLimitMiddleware
 
@@ -41,6 +41,16 @@ app.add_middleware(
     RateLimitMiddleware,
     limit=settings.RATE_LIMIT,
     window=settings.RATE_LIMIT_WINDOW,
+)
+
+# CORS must be added last so it is the outermost middleware
+# and wraps rate-limit 429s / exception responses too.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 from routes_auth import router as auth_router
