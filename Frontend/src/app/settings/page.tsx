@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { User, Moon, Sun, Monitor, Bell, Shield, Palette, Globe, Save, Loader2 } from 'lucide-react';
+import { User, Moon, Sun, Monitor, Bell, Shield, Palette, Globe, Save, Loader2, KeyRound, Download } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/i18n/ThemeContext';
 import api from '@/lib/api';
@@ -21,6 +21,14 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'profile' | 'appearance' | 'notifications' | 'security'>('profile');
+
+  const [pwdForm, setPwdForm] = useState({
+    current_password: '',
+    new_password: '',
+    confirm_password: '',
+  });
+  const [pwdSaving, setPwdSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const [form, setForm] = useState({
     first_name: '',
@@ -137,7 +145,52 @@ export default function SettingsPage() {
   };
 
   const changePassword = async () => {
-    showToast('Смена пароля: перейдите в настройки аккаунта', 'info');
+    if (!pwdForm.current_password || !pwdForm.new_password) {
+      showToast('Заполните все поля пароля', 'error');
+      return;
+    }
+    if (pwdForm.new_password.length < 8) {
+      showToast('Новый пароль должен быть не короче 8 символов', 'error');
+      return;
+    }
+    if (pwdForm.new_password !== pwdForm.confirm_password) {
+      showToast('Пароли не совпадают', 'error');
+      return;
+    }
+    setPwdSaving(true);
+    try {
+      await api.post('/users/me/change-password/', {
+        current_password: pwdForm.current_password,
+        new_password: pwdForm.new_password,
+      });
+      setPwdForm({ current_password: '', new_password: '', confirm_password: '' });
+      showToast('Пароль успешно изменён', 'success');
+    } catch (err) {
+      showToast(getErrorMessage(err), 'error');
+    } finally {
+      setPwdSaving(false);
+    }
+  };
+
+  const exportData = async () => {
+    setExporting(true);
+    try {
+      const res = await api.get('/users/me/export/');
+      const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `careerhub_export_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      showToast('Данные экспортированы', 'success');
+    } catch (err) {
+      showToast(getErrorMessage(err), 'error');
+    } finally {
+      setExporting(false);
+    }
   };
 
   if (loading) {
@@ -505,13 +558,49 @@ export default function SettingsPage() {
               </div>
               <div className="p-6 space-y-6">
                 <div className="p-4 rounded-lg bg-surface-hover border border-border-default">
+                  <div className="flex items-center gap-2 mb-4">
+                    <KeyRound size={16} className="text-accent-primary" />
+                    <h4 className="font-medium">Смена пароля</h4>
+                  </div>
+                  <div className="space-y-3">
+                    <Input
+                      label="Текущий пароль"
+                      type="password"
+                      value={pwdForm.current_password}
+                      onChange={(e) => setPwdForm((f) => ({ ...f, current_password: e.target.value }))}
+                      placeholder="••••••••"
+                    />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <Input
+                        label="Новый пароль"
+                        type="password"
+                        value={pwdForm.new_password}
+                        onChange={(e) => setPwdForm((f) => ({ ...f, new_password: e.target.value }))}
+                        placeholder="Минимум 8 символов"
+                      />
+                      <Input
+                        label="Повторите новый пароль"
+                        type="password"
+                        value={pwdForm.confirm_password}
+                        onChange={(e) => setPwdForm((f) => ({ ...f, confirm_password: e.target.value }))}
+                        placeholder="••••••••"
+                      />
+                    </div>
+                    <Button size="sm" onClick={changePassword} loading={pwdSaving}>
+                      Изменить пароль
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-lg bg-surface-hover border border-border-default">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h4 className="font-medium">Смена пароля</h4>
-                      <p className="text-xs text-muted">Рекомендуется менять пароль раз в 3 месяца</p>
+                      <h4 className="font-medium">Экспорт моих данных</h4>
+                      <p className="text-xs text-muted">Скачать JSON со всеми данными аккаунта</p>
                     </div>
-                    <Button variant="secondary" size="sm" onClick={changePassword}>
-                      Изменить
+                    <Button variant="secondary" size="sm" onClick={exportData} loading={exporting}>
+                      <Download size={14} className="mr-1.5" />
+                      Экспорт
                     </Button>
                   </div>
                 </div>
