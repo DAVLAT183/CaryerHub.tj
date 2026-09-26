@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, MapPin, Clock, Building2, Globe, CheckCircle, Send, Download, Map, Image as ImageIcon, FileText, MessageSquare, Route, Navigation, Loader2 } from 'lucide-react';
+import { ArrowLeft, MapPin, Clock, Building2, Globe, CheckCircle, Send, Map, FileText, ExternalLink, Route, Navigation, Loader2 } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
+import { useI18n } from '@/i18n/I18nContext';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -16,7 +17,7 @@ import Skeleton from '@/components/ui/Skeleton';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import ReadingProgress from '@/components/ui/ReadingProgress';
 import ResumeStyleSelector, { STYLE_OPTIONS } from '@/components/ui/ResumeStyleSelector';
-import { formatSalary, formatSchedule, formatWorkFormat, formatResumeStyle, formatDate, showToast, getErrorMessage } from '@/lib/utils';
+import { formatSalary, formatSchedule, formatWorkFormat, formatResumeStyle, formatDate, showToast, getErrorMessage, getJobSource, getApplicationJobId } from '@/lib/utils';
 import type { Job, Resume, ResumeStyle } from '@/types';
 
 type StyleOptionItem = (typeof STYLE_OPTIONS)[number];
@@ -25,8 +26,8 @@ const STYLE_OPTIONS_MAP = Object.fromEntries(STYLE_OPTIONS.map((o: StyleOptionIt
 
 export default function JobDetailPage() {
   const { id } = useParams();
-  const router = useRouter();
   const { user } = useAuth();
+  const { t } = useI18n();
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
   const [applyOpen, setApplyOpen] = useState(false);
@@ -76,7 +77,7 @@ export default function JobDetailPage() {
       api.get('/applications/').then((res) => {
         const data = res.data;
         const list = data.results || data;
-        const hasApplied = list.some((a: { job: number }) => a.job === job.id);
+        const hasApplied = list.some((a: { job: unknown }) => getApplicationJobId(a.job) === job.id);
         setApplied(hasApplied);
       }).catch(() => {});
     }
@@ -171,7 +172,7 @@ export default function JobDetailPage() {
       });
       setApplied(true);
       setApplyOpen(false);
-      showToast('Отклик отправлен!', 'success');
+      showToast(t('jobs.applySent'), 'success');
     } catch (err) {
       showToast(getErrorMessage(err), 'error');
     } finally {
@@ -185,11 +186,11 @@ export default function JobDetailPage() {
       if (isFavorited) {
         await api.delete(`/favorites/${job.id}/remove/`);
         setIsFavorited(false);
-        showToast('Удалено из избранного', 'info');
+        showToast(t('notifications.removedFromFavorites'), 'info');
       } else {
         await api.post('/favorites/add/', { job_id: job.id });
         setIsFavorited(true);
-        showToast('Добавлено в избранное', 'success');
+        showToast(t('notifications.addedToFavorites'), 'success');
       }
     } catch (err) {
       showToast(getErrorMessage(err), 'error');
@@ -208,14 +209,13 @@ export default function JobDetailPage() {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      const styleNames: Record<string, string> = { classic: 'Классический', modern: 'Современный', minimal: 'Минималистичный', creative: 'Креативный' };
       const styleKey = style || 'modern';
-      link.download = `vacancy_${job.id}_${styleNames[styleKey] || 'PDF'}.pdf`;
+      link.download = `vacancy_${job.id}_${t(`resumeStyles.${styleKey}`)}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-      showToast('PDF скачан', 'success');
+      showToast(t('jobs.pdfDownloaded'), 'success');
     } catch (err) {
       showToast(getErrorMessage(err), 'error');
     } finally {
@@ -237,7 +237,7 @@ export default function JobDetailPage() {
       setRouteData(res.data);
       setTimeout(() => initRouteMap(res.data.polyline, res.data.user_address), 100);
     } catch (err: any) {
-      const msg = err.response?.data?.detail || 'Не удалось построить маршрут';
+      const msg = err.response?.data?.detail || t('jobs.routeErrorDefault');
       setRouteError(msg);
     } finally {
       setRouteLoading(false);
@@ -281,7 +281,7 @@ export default function JobDetailPage() {
       new (window as any).google.maps.Marker({
         position: { lat: userLat, lng: userLng },
         map,
-        title: 'Вы',
+        title: t('jobs.you'),
         icon: { path: (window as any).google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: '#3B82F6', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 },
       });
 
@@ -320,25 +320,28 @@ export default function JobDetailPage() {
     return (
       <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-12 sm:py-16 text-center">
         <div className="text-5xl mb-4">😕</div>
-        <h2 className="font-heading font-bold text-xl mb-2">Вакансия не найдена</h2>
-        <Link href="/jobs" className="text-accent text-sm hover:text-accent-cyan">← ко всем вакансиям</Link>
+        <h2 className="font-heading font-bold text-xl mb-2">{t('jobs.jobNotFound')}</h2>
+        <Link href="/jobs" className="text-accent text-sm hover:text-accent-cyan">← {t('jobs.backToAll')}</Link>
       </div>
     );
   }
+
+  const sourceInfo = getJobSource(job.source);
+  const isExternal = !!sourceInfo && !!job.source_url;
 
   return (
     <div className="max-w-[1280px] mx-auto px-6 py-8">
       <ReadingProgress />
       <Breadcrumbs
         items={[
-          { label: 'Вакансии', href: '/jobs' },
+          { label: t('nav.jobs'), href: '/jobs' },
           { label: job.title },
         ]}
         className="mb-4"
       />
       <Link href="/jobs" className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-white transition-colors mb-4 sm:mb-6">
         <ArrowLeft size={14} />
-        Ко всем вакансиям
+        {t('jobs.backToAll')}
       </Link>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -346,7 +349,7 @@ export default function JobDetailPage() {
           <div className="flex items-start justify-between mb-2">
             <div className="flex-1">
               <h1 className="font-heading font-bold text-xl sm:text-2xl md:text-3xl">{job.title}</h1>
-              <p className="text-muted text-sm mt-1">{job.employer?.company_name || 'Компания'}</p>
+              <p className="text-muted text-sm mt-1">{job.employer?.company_name || t('jobs.company')}</p>
             </div>
             <div className="flex items-center gap-2 ml-4">
               {user?.role === 'student' && (
@@ -370,7 +373,7 @@ export default function JobDetailPage() {
                 </Button>
                 {pdfMenuOpen && (
                   <div className="absolute right-0 top-full mt-1 z-50 w-56 bg-surface-card border border-border-default rounded-xl shadow-[0_6px_20px_rgba(20,30,40,0.08)] overflow-hidden">
-                    <p className="px-3 py-2 text-xs text-text-muted font-medium border-b border-border-default">Выберите стиль</p>
+                    <p className="px-3 py-2 text-xs text-text-muted font-medium border-b border-border-default">{t('resumeStyles.selectStyle')}</p>
                     {STYLE_OPTIONS.map((s: StyleOptionItem) => (
                       <button
                         key={s.value}
@@ -399,11 +402,11 @@ export default function JobDetailPage() {
               <MapPin size={10} className="mr-1" />
               {formatWorkFormat(job.work_format)}
             </Badge>
-            {!job.experience_required && <Badge variant="no-experience">Без опыта</Badge>}
-            {job.source === 'somon_tj' && (
+            {!job.experience_required && <Badge variant="no-experience">{t('jobs.noExperience')}</Badge>}
+            {sourceInfo && (
               <Badge variant="default" className="bg-accent-primary/10 text-accent-primary border-accent-primary/20">
-                <ImageIcon size={10} className="mr-1" />
-                somon.tj
+                <Globe size={10} className="mr-1" />
+                {sourceInfo.name}
               </Badge>
             )}
           </div>
@@ -421,7 +424,7 @@ export default function JobDetailPage() {
           <Card className="mb-6">
             <h2 className="font-heading font-semibold text-lg mb-4 flex items-center gap-2">
               <FileText size={18} className="text-accent-primary" />
-              Описание вакансии
+              {t('jobs.descriptionTitle')}
             </h2>
             <div className="text-sm text-soft/80 leading-relaxed whitespace-pre-wrap">
               {job.description}
@@ -432,7 +435,7 @@ export default function JobDetailPage() {
             <Card className="mb-6">
               <h2 className="font-heading font-semibold text-lg mb-4 flex items-center gap-2">
                 <Map size={18} className="text-accent-primary" />
-                Местоположение на карте
+                {t('jobs.locationOnMap')}
               </h2>
               <div className="mb-4">
                 <div
@@ -453,7 +456,7 @@ export default function JobDetailPage() {
                       className="text-xs text-accent-primary hover:text-accent-primary/80 flex items-center gap-1"
                     >
                       <Globe size={12} />
-                      Открыть в Google Maps
+                      {t('jobs.openInMaps')}
                     </a>
                   </div>
                 )}
@@ -466,7 +469,7 @@ export default function JobDetailPage() {
               <div className="flex items-center justify-between mb-4">
                 <h2 className="font-heading font-semibold text-lg flex items-center gap-2">
                   <Route size={18} className="text-accent-primary" />
-                  Маршрут до работы
+                  {t('jobs.routeTitle')}
                 </h2>
                 {!routeData && !routeLoading && (
                   <button
@@ -474,7 +477,7 @@ export default function JobDetailPage() {
                     className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-accent-primary/10 text-accent-primary hover:bg-accent-primary/20 transition-colors"
                   >
                     <Navigation size={14} />
-                    Построить маршрут
+                    {t('jobs.buildRoute')}
                   </button>
                 )}
               </div>
@@ -482,7 +485,7 @@ export default function JobDetailPage() {
               {routeLoading && (
                 <div className="flex flex-col items-center py-8">
                   <Loader2 size={32} className="animate-spin text-accent-primary mb-3" />
-                  <p className="text-sm text-muted">AI анализирует оптимальный путь...</p>
+                  <p className="text-sm text-muted">{t('jobs.analyzingRoute')}</p>
                 </div>
               )}
 
@@ -498,17 +501,17 @@ export default function JobDetailPage() {
                     <div className="p-3 rounded-xl bg-surface-hover border border-border-default text-center">
                       <Navigation size={18} className="text-accent-primary mx-auto mb-1" />
                       <p className="text-lg font-bold text-text-primary">{routeData.distance_text}</p>
-                      <p className="text-[11px] text-text-muted">Расстояние</p>
+                      <p className="text-[11px] text-text-muted">{t('jobs.distance')}</p>
                     </div>
                     <div className="p-3 rounded-xl bg-surface-hover border border-border-default text-center">
                       <Clock size={18} className="text-accent-primary mx-auto mb-1" />
                       <p className="text-lg font-bold text-text-primary">{routeData.duration_text}</p>
-                      <p className="text-[11px] text-text-muted">Время в пути</p>
+                      <p className="text-[11px] text-text-muted">{t('jobs.travelTime')}</p>
                     </div>
                     <div className="p-3 rounded-xl bg-surface-hover border border-border-default text-center">
                       <MapPin size={18} className="text-accent-primary mx-auto mb-1" />
                       <p className="text-sm font-bold text-text-primary truncate">{routeData.user_address.split(',')[0]}</p>
-                      <p className="text-[11px] text-text-muted">Откуда</p>
+                      <p className="text-[11px] text-text-muted">{t('jobs.fromWhere')}</p>
                     </div>
                   </div>
 
@@ -519,7 +522,7 @@ export default function JobDetailPage() {
                   />
 
                   <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-text-subtle">Маршрут</p>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-text-subtle">{t('jobs.routeLabel')}</p>
                     {routeData.steps.map((step, i) => (
                       <div key={i} className="flex items-start gap-3 p-2 rounded-lg hover:bg-surface-hover transition-colors">
                         <div className="w-6 h-6 rounded-full bg-accent-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -528,7 +531,7 @@ export default function JobDetailPage() {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-text-primary">{step.text}</p>
                           {step.distance > 0 && (
-                            <p className="text-[11px] text-text-muted">{step.distance} м</p>
+                            <p className="text-[11px] text-text-muted">{t('jobs.meters', { n: step.distance })}</p>
                           )}
                         </div>
                       </div>
@@ -539,14 +542,14 @@ export default function JobDetailPage() {
                     onClick={() => { setRouteData(null); setRouteMapLoaded(false); }}
                     className="text-xs text-text-muted hover:text-text-primary transition-colors"
                   >
-                    Скрыть маршрут
+                    {t('jobs.hideRoute')}
                   </button>
                 </div>
               )}
 
               {!routeData && !routeLoading && !routeError && (
                 <p className="text-sm text-text-muted">
-                  Построим оптимальный маршрут от вашего места проживания ({user.location}) до места работы
+                  {t('jobs.routeIntro', { location: user.location })}
                 </p>
               )}
             </Card>
@@ -557,11 +560,11 @@ export default function JobDetailPage() {
               <div className="flex items-center gap-3 p-4 rounded-xl bg-surface-hover border border-border-default">
                 <MapPin size={18} className="text-accent-primary flex-shrink-0" />
                 <div>
-                  <p className="text-sm font-medium text-text-primary">Укажите место проживания</p>
+                  <p className="text-sm font-medium text-text-primary">{t('jobs.specifyLocation')}</p>
                   <p className="text-xs text-text-muted mt-0.5">
-                    Чтобы построить маршрут до работы,{' '}
-                    <a href="/settings" className="text-accent-primary hover:underline">заполните место проживания</a>{' '}
-                    в настройках профиля
+                    {t('jobs.specifyLocationDesc')}{' '}
+                    <a href="/settings" className="text-accent-primary hover:underline">{t('profile.fill')}</a>{' '}
+                    {t('jobs.inSettings')}
                   </p>
                 </div>
               </div>
@@ -571,26 +574,26 @@ export default function JobDetailPage() {
           <Card>
             <h2 className="font-heading font-semibold text-lg mb-4 flex items-center gap-2">
               <CheckCircle size={18} className="text-accent-primary" />
-              Требования
+              {t('jobs.requirements')}
             </h2>
             <ul className="text-sm text-soft/80 leading-relaxed space-y-2">
               <li className="flex items-start gap-2">
                 <CheckCircle size={14} className="text-accent mt-0.5 flex-shrink-0" />
-                Минимальный возраст: {job.min_age} лет
+                {t('jobs.minAgeYears', { n: job.min_age })}
               </li>
               {!job.experience_required && (
                 <li className="flex items-start gap-2">
                   <CheckCircle size={14} className="text-accent mt-0.5 flex-shrink-0" />
-                  Опыт работы не требуется
+                  {t('jobs.noExpRequired')}
                 </li>
               )}
               <li className="flex items-start gap-2">
                 <CheckCircle size={14} className="text-accent mt-0.5 flex-shrink-0" />
-                Формат: {formatWorkFormat(job.work_format)}
+                {t('employer.workFormat')}: {formatWorkFormat(job.work_format)}
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle size={14} className="text-accent mt-0.5 flex-shrink-0" />
-                График: {formatSchedule(job.schedule)}
+                {t('employer.schedule')}: {formatSchedule(job.schedule)}
               </li>
             </ul>
           </Card>
@@ -604,10 +607,10 @@ export default function JobDetailPage() {
                   <Building2 size={20} className="text-accent" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-white">{job.employer?.company_name || 'Компания'}</h3>
+                  <h3 className="text-sm font-semibold text-white">{job.employer?.company_name || t('jobs.company')}</h3>
                   {job.employer?.is_verified && (
                     <span className="text-xs text-success flex items-center gap-1">
-                      <CheckCircle size={10} /> Верифицирована
+                      <CheckCircle size={10} /> {t('employer.verified')}
                     </span>
                   )}
                   {job.employer?.description && (
@@ -646,47 +649,75 @@ export default function JobDetailPage() {
                   </p>
                 )}
 
-                {job.source === 'somon_tj' && job.source_url && (
-                  <a
-                    href={job.source_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-xs text-accent hover:text-accent-cyan"
-                  >
-                    <Globe size={12} />
-                    Источник: somon.tj
-                  </a>
+                {sourceInfo && (
+                  <div className="space-y-1.5 pt-1">
+                    {sourceInfo.siteUrl && (
+                      <a
+                        href={sourceInfo.siteUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 text-xs text-accent hover:text-accent-cyan"
+                      >
+                        <Globe size={12} />
+                        Сайт: {sourceInfo.name}
+                      </a>
+                    )}
+                    {job.source_url && (
+                      <a
+                        href={job.source_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 text-xs text-accent hover:text-accent-cyan"
+                      >
+                        <ExternalLink size={12} />
+                        Открыть вакансию на сайте
+                      </a>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
 
             <div className="pt-4 border-t border-white/[0.06] space-y-3">
+              {isExternal && job.source_url && (
+                <a href={job.source_url} target="_blank" rel="noopener noreferrer" className="block">
+                  <Button className="w-full">
+                    <ExternalLink size={16} className="mr-2" />
+                    {t('jobs.applyOnSite')}
+                  </Button>
+                </a>
+              )}
+
               {user?.role === 'student' && (
                 applied ? (
                   <div className="bg-success/12 text-success text-sm text-center py-3 rounded-btn">
                     Вы уже откликнулись
                   </div>
                 ) : (
-                  <Button onClick={() => setApplyOpen(true)} className="w-full">
+                  <Button
+                    onClick={() => setApplyOpen(true)}
+                    className="w-full"
+                    variant={isExternal ? 'secondary' : 'primary'}
+                  >
                     <Send size={16} className="mr-2" />
-                    Откликнуться
+                    {isExternal ? t('jobs.applyLocal') : t('jobs.apply')}
                   </Button>
                 )
               )}
 
-              {user?.role === 'student' && job.employer?.user?.id && (
-                <Link href={`/chat?user=${job.employer.user.id}`}>
-                  <Button variant="secondary" className="w-full">
-                    <MessageSquare size={16} className="mr-2" />
-                    Написать работодателю
-                  </Button>
-                </Link>
-              )}
-
-              {!user && (
+              {!user && !isExternal && (
                 <Link href="/auth/login">
                   <Button className="w-full" variant="secondary">Войти, чтобы откликнуться</Button>
                 </Link>
+              )}
+
+              {!user && isExternal && job.source_url && (
+                <a href={job.source_url} target="_blank" rel="noopener noreferrer" className="block">
+                  <Button className="w-full" variant="secondary">
+                    <ExternalLink size={16} className="mr-2" />
+                    {t('jobs.applyOnSite')}
+                  </Button>
+                </a>
               )}
             </div>
           </Card>

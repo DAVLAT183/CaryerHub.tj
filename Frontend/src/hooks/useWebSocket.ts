@@ -56,7 +56,10 @@ export function useWebSocket({ path, onMessage, onConnect, onDisconnect, enabled
         wsRef.current = null;
         onDisconnectRef.current?.();
 
-        if (event.code !== 1000 && enabled) {
+        // 4001/4003 — сервер отклонил токен (нет токена / email не подтверждён):
+        // повторные подключения бессмысленны, ждём обновления токена или верификации
+        const isAuthRejection = event.code === 4001 || event.code === 4003;
+        if (event.code !== 1000 && !isAuthRejection && enabled) {
           const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
           reconnectAttempts.current++;
           reconnectTimeoutRef.current = setTimeout(connect, delay);

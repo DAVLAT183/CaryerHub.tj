@@ -16,7 +16,7 @@ from schemas import (
     UserResponse, StudentProfileResponse, EmployerProfileResponse,
     NotificationResponse,
 )
-from auth import get_current_user
+from auth import get_current_user, require_verified_email
 
 router = APIRouter(tags=["Jobs"])
 
@@ -121,7 +121,7 @@ async def list_categories(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/users/me/")
-async def get_me(user: User = Depends(get_current_user)):
+async def get_me(user: User = Depends(require_verified_email)):
     return {
         "id": user.id,
         "username": user.username,
@@ -140,7 +140,7 @@ async def get_me(user: User = Depends(get_current_user)):
 @router.post("/favorites/add/")
 async def add_favorite(
     data: dict,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if user.role != "student":
@@ -173,7 +173,7 @@ async def add_favorite(
 
 @router.get("/favorites/")
 async def list_favorites(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -206,7 +206,7 @@ async def list_favorites(
 @router.post("/applications/")
 async def create_application(
     data: dict,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if user.role != "student":
@@ -247,7 +247,7 @@ async def create_application(
 
 @router.get("/applications/")
 async def list_applications(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if user.role == "student":
@@ -293,7 +293,7 @@ async def list_applications(
 
 @router.get("/notifications/")
 async def list_notifications(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -319,7 +319,7 @@ async def list_notifications(
 
 @router.get("/notifications/unread-count/")
 async def unread_count(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(

@@ -1,15 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { FileText, Clock } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
+import { useWebSocket } from '@/hooks/useWebSocket';
 import Badge from '@/components/ui/Badge';
 import Card from '@/components/ui/Card';
 import Select from '@/components/ui/Select';
 import Skeleton from '@/components/ui/Skeleton';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
-import { formatDate, formatStatus, clsx, showToast, getErrorMessage } from '@/lib/utils';
+import { formatDate, formatStatus, showToast, getErrorMessage } from '@/lib/utils';
 import { useI18n } from '@/i18n/I18nContext';
 import type { Application } from '@/types';
 
@@ -29,6 +30,23 @@ export default function ApplicationsPage() {
       showToast(getErrorMessage(err), 'error');
     }).finally(() => setLoading(false));
   }, [user]);
+
+  const handleWsMessage = useCallback((msg: Record<string, unknown>) => {
+    if (msg.type === 'application_new' && msg.data && typeof msg.data === 'object') {
+      const app = msg.data as unknown as Application;
+      setApplications((prev) => {
+        if (prev.some((a) => a.id === app.id)) return prev;
+        return [app, ...prev];
+      });
+      showToast(t('applications.newApplication'), 'info');
+    }
+  }, [t]);
+
+  useWebSocket({
+    path: '/ws/notifications/',
+    onMessage: handleWsMessage,
+    enabled: !!user && user.role === 'employer',
+  });
 
   const updateStatus = async (id: number, newStatus: string) => {
     try {

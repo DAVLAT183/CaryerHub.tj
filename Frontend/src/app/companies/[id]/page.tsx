@@ -10,7 +10,7 @@ import Card from '@/components/ui/Card';
 import Skeleton from '@/components/ui/Skeleton';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import JobCard from '@/components/jobs/JobCard';
-import { showToast, getErrorMessage } from '@/lib/utils';
+import { showToast, getErrorMessage, getApplicationJobId, mediaUrl } from '@/lib/utils';
 import type { EmployerProfile, Job } from '@/types';
 
 export default function CompanyDetailPage() {
@@ -40,7 +40,11 @@ export default function CompanyDetailPage() {
       api.get('/applications/').then((res) => {
         const data = res.data;
         const list = data.results || data;
-        setAppliedJobs(list.map((a: { job: number }) => a.job));
+        setAppliedJobs(
+          list
+            .map((a: { job: unknown }) => getApplicationJobId(a.job))
+            .filter((id: number | null): id is number => id !== null)
+        );
       }).catch(() => {});
     }
   }, [user]);
@@ -88,7 +92,7 @@ export default function CompanyDetailPage() {
               <div className="flex items-start gap-4">
                 <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-xl bg-surface-hover border border-border-default flex items-center justify-center flex-shrink-0">
                   {company.user?.avatar ? (
-                    <img src={company.user.avatar} alt={company.company_name} className="w-full h-full rounded-xl object-cover" />
+                    <img src={mediaUrl(company.user.avatar)} alt={company.company_name} className="w-full h-full rounded-xl object-cover" />
                   ) : (
                     <span className="font-heading text-display-sm text-accent-primary">
                       {company.company_name?.charAt(0) || '?'}

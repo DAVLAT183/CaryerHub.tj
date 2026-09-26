@@ -18,7 +18,7 @@ from schemas import (
     ConversationResponse, UserResponse,
     NotificationPreferenceResponse, NotificationPreferenceUpdate,
 )
-from auth import get_current_user, get_optional_user
+from auth import get_current_user, get_optional_user, require_verified_email
 
 router = APIRouter(prefix="/api", tags=["Misc"])
 
@@ -42,7 +42,7 @@ def _session_resp(sess: ChatSession) -> ChatSessionResponse:
 @router.get("/favorites/", response_model=list[FavoriteResponse])
 async def list_favorites(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
 ):
     student_profile = (await db.execute(
         select(StudentProfile).where(StudentProfile.user_id == current_user.id)
@@ -83,7 +83,7 @@ async def list_favorites(
 async def add_favorite(
     favorite_in: FavoriteCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
 ):
     student_profile = (await db.execute(
         select(StudentProfile).where(StudentProfile.user_id == current_user.id)
@@ -134,7 +134,7 @@ async def add_favorite(
 async def remove_favorite(
     job_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
 ):
     student_profile = (await db.execute(
         select(StudentProfile).where(StudentProfile.user_id == current_user.id)
@@ -163,7 +163,7 @@ async def remove_favorite(
 async def create_favorite(
     favorite_in: FavoriteCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
 ):
     return await add_favorite(favorite_in, db, current_user)
 
@@ -176,7 +176,7 @@ async def create_favorite(
 async def list_notifications(
     is_read: bool | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
 ):
     stmt = select(Notification).where(Notification.user_id == current_user.id)
 
@@ -190,7 +190,7 @@ async def list_notifications(
 @router.get("/notifications/unread_count/")
 async def unread_count(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
 ):
     result = await db.execute(
         select(func.count(Notification.id)).where(
@@ -207,7 +207,7 @@ async def unread_count(
 @router.post("/notifications/mark_all_read/", status_code=200)
 async def mark_all_read(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
 ):
     result = await db.execute(
         select(Notification).where(
@@ -228,7 +228,7 @@ async def mark_all_read(
 async def mark_one_read(
     notif_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
 ):
     notif = (await db.execute(
         select(Notification).where(
@@ -257,7 +257,7 @@ async def update_notification(
     notif_id: int,
     payload: NotificationUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
 ):
     notif = (await db.execute(
         select(Notification).where(
@@ -283,7 +283,7 @@ async def update_notification(
 async def delete_notification(
     notif_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
 ):
     notif = (await db.execute(
         select(Notification).where(
@@ -308,7 +308,7 @@ async def delete_notification(
 @router.get("/notification-settings/", response_model=NotificationPreferenceResponse)
 async def get_notification_settings(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
 ):
     pref = (await db.execute(
         select(NotificationPreference).where(NotificationPreference.user_id == current_user.id)
@@ -327,7 +327,7 @@ async def get_notification_settings(
 async def update_notification_settings(
     payload: NotificationPreferenceUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
 ):
     pref = (await db.execute(
         select(NotificationPreference).where(NotificationPreference.user_id == current_user.id)
@@ -354,7 +354,7 @@ async def update_notification_settings(
 @router.get("/chat/sessions/", response_model=list[ChatSessionResponse])
 async def list_chat_sessions(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
 ):
     result = await db.execute(
         select(ChatSession)
@@ -391,7 +391,7 @@ async def list_chat_sessions(
 async def get_chat_session(
     session_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
 ):
     session = (await db.execute(
         select(ChatSession).where(
@@ -427,7 +427,7 @@ async def get_chat_session(
 async def create_chat_session(
     session_in: ChatSessionCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
 ):
     session = ChatSession(
         user_id=current_user.id,
@@ -445,7 +445,7 @@ async def update_chat_session(
     session_id: int,
     session_in: ChatSessionCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
 ):
     session = (await db.execute(
         select(ChatSession).where(
@@ -472,7 +472,7 @@ async def update_chat_session(
 async def delete_chat_session(
     session_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
 ):
     session = (await db.execute(
         select(ChatSession).where(
@@ -504,7 +504,7 @@ async def delete_chat_session(
 async def send_chat_message(
     message_in: ChatMessageCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
 ):
     content = (message_in.content or "").strip()
     if not content:
@@ -591,7 +591,7 @@ async def send_chat_message(
 async def get_session_messages(
     session_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
 ):
     session = (await db.execute(
         select(ChatSession).where(
@@ -634,7 +634,7 @@ async def get_session_messages(
 @router.get("/messages/conversations/", response_model=list[ConversationResponse])
 async def list_conversations(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
 ):
     sent_q = (
         select(
@@ -718,7 +718,7 @@ async def list_conversations(
 @router.get("/messages/employers/", response_model=list[UserResponse])
 async def list_employers_for_chat(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
 ):
     if current_user.role != "student":
         return []
@@ -763,7 +763,7 @@ async def list_employers_for_chat(
 @router.get("/messages/students/", response_model=list[UserResponse])
 async def list_students_for_chat(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
 ):
     if current_user.role != "employer":
         return []
@@ -810,7 +810,7 @@ async def list_students_for_chat(
 async def get_messages_with_user(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
 ):
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot message yourself")
@@ -856,7 +856,7 @@ async def send_direct_message(
     user_id: int,
     message_in: DirectMessageCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
 ):
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot message yourself")

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { User, MapPin, GraduationCap, BookOpen, Calendar, Plus, Pencil, Trash2, Sparkles, Zap, Download, FileText, ChevronRight, CheckCircle } from 'lucide-react';
+import { User, MapPin, GraduationCap, BookOpen, Calendar, Plus, Pencil, Trash2, Sparkles, Zap, Download, FileText, ChevronRight, CheckCircle, Camera, Loader2 } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
+import { useI18n } from '@/i18n/I18nContext';
 import Input from '@/components/ui/Input';
 import Textarea from '@/components/ui/Textarea';
 import Select from '@/components/ui/Select';
@@ -33,7 +34,8 @@ interface AIResume {
 }
 
 export default function StudentProfilePage() {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
+  const { t } = useI18n();
   const router = useRouter();
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [resumes, setResumes] = useState<Resume[]>([]);
@@ -45,6 +47,38 @@ export default function StudentProfilePage() {
   const [aiResume, setAiResume] = useState<AIResume | null>(null);
   const [aiPreviewOpen, setAiPreviewOpen] = useState(false);
   const [resumeGenOpen, setResumeGenOpen] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadAvatar = async (file: File) => {
+    setAvatarUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await api.post('/users/me/avatar/', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      updateUser(res.data);
+      showToast(t('profile.photoUpdated'), 'success');
+    } catch (err) {
+      showToast(getErrorMessage(err), 'error');
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
+  const removeAvatar = async () => {
+    setAvatarUploading(true);
+    try {
+      const res = await api.delete('/users/me/avatar/');
+      updateUser(res.data);
+      showToast(t('profile.photoRemoved'), 'success');
+    } catch (err) {
+      showToast(getErrorMessage(err), 'error');
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
 
   const [profileForm, setProfileForm] = useState({
     university: '',
@@ -107,7 +141,7 @@ export default function StudentProfilePage() {
       setEditing(false);
       const res = await api.get(`/student-profiles/${profile.id}/`);
       setProfile(res.data);
-      showToast('Профиль сохранён', 'success');
+      showToast(t('profile.profileSaved'), 'success');
     } catch (err) {
       showToast(getErrorMessage(err), 'error');
     }
@@ -134,18 +168,18 @@ export default function StudentProfilePage() {
       setResumeModalOpen(false);
       setEditingResume(null);
       setResumeForm({ title: '', about: '', skills: '', schedule_type: 'flexible', work_format: 'online', style: 'modern', github_url: '', portfolio_url: '', linkedin_url: '' });
-      showToast(isEditing ? 'Резюме обновлено' : 'Резюме создано', 'success');
+      showToast(isEditing ? t('notifications.resumeUpdated') : t('notifications.resumeCreated'), 'success');
     } catch (err) {
       showToast(getErrorMessage(err), 'error');
     }
   };
 
   const deleteResume = async (id: number) => {
-    if (!confirm('Удалить резюме?')) return;
+    if (!confirm(t('profile.confirmDeleteResume'))) return;
     try {
       await api.delete(`/resumes/${id}/`);
       setResumes((prev) => prev.filter((r) => r.id !== id));
-      showToast('Резюме удалено', 'info');
+      showToast(t('profile.resumeDeleted'), 'info');
     } catch (err) {
       showToast(getErrorMessage(err), 'error');
     }
@@ -157,7 +191,7 @@ export default function StudentProfilePage() {
       const res = await api.post<AIResume>('/ai/generate-resume/');
       setAiResume(res.data);
       setAiPreviewOpen(true);
-      showToast('Резюме сгенерировано!', 'success');
+      showToast(t('profile.resumeGenerated'), 'success');
     } catch (err) {
       showToast(getErrorMessage(err), 'error');
     } finally {
@@ -187,13 +221,16 @@ export default function StudentProfilePage() {
     setResumeModalOpen(true);
   };
 
-  const downloadResumePDF = async (resumeId: number) => {
+  const downloadResumePDF = async (resumeId: number, style?: ResumeStyle) => {
     try {
-      const res = await api.get(`/resumes/${resumeId}/pdf/`, { responseType: 'blob' });
+      const params: Record<string, string> = {};
+      if (style) params.style = style;
+      const res = await api.get(`/resumes/${resumeId}/pdf/`, { params, responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `resume_${resumeId}.pdf`);
+      const styleKey = style || 'modern';
+      link.setAttribute('download', `resume_${resumeId}_${t(`resumeStyles.${styleKey}`)}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -219,11 +256,11 @@ export default function StudentProfilePage() {
   }
 
   const profileSteps = [
-    { key: 'location', label: 'Место проживания', value: user?.location, icon: MapPin },
-    { key: 'university', label: 'Университет', value: profile?.university, icon: GraduationCap },
-    { key: 'faculty', label: 'Факультет', value: profile?.faculty, icon: BookOpen },
-    { key: 'course', label: 'Курс', value: profile?.course?.toString(), icon: Calendar },
-    { key: 'city', label: 'Город', value: profile?.city, icon: MapPin },
+    { key: 'location', label: t('profile.location'), value: user?.location, icon: MapPin },
+    { key: 'university', label: t('profile.university'), value: profile?.university, icon: GraduationCap },
+    { key: 'faculty', label: t('profile.faculty'), value: profile?.faculty, icon: BookOpen },
+    { key: 'course', label: t('profile.course'), value: profile?.course?.toString(), icon: Calendar },
+    { key: 'city', label: t('profile.city'), value: profile?.city, icon: MapPin },
   ];
 
   const completedSteps = profileSteps.filter((s) => !!s.value).length;
@@ -233,10 +270,10 @@ export default function StudentProfilePage() {
   return (
     <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
       <Breadcrumbs
-        items={[{ label: 'Профиль', href: '/profile' }, { label: 'Студент' }]}
+        items={[{ label: t('profile.title'), href: '/profile' }, { label: t('auth.roleStudent') }]}
         className="mb-3"
       />
-      <h1 className="font-heading font-bold text-xl sm:text-[28px] text-text-primary tracking-tight mb-6 sm:mb-8">Мой профиль</h1>
+      <h1 className="font-heading font-bold text-xl sm:text-[28px] text-text-primary tracking-tight mb-6 sm:mb-8">{t('profile.myProfile')}</h1>
 
       {/* Profile Completion Prompt */}
       {!profileComplete && (
@@ -246,9 +283,9 @@ export default function StudentProfilePage() {
               <FileText size={22} className="text-accent-primary" />
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="font-heading font-semibold text-[15px] text-text-primary mb-1">Заполните профиль</h3>
+              <h3 className="font-heading font-semibold text-[15px] text-text-primary mb-1">{t('profile.fillProfile')}</h3>
               <p className="text-[13px] text-text-muted mb-4">
-                Заполните все данные чтобы работодатели могли вас найти. Заполнено {completedSteps} из {totalSteps}.
+                {t('profile.fillProfileProgress', { completed: completedSteps, total: totalSteps })}
               </p>
               <div className="flex flex-col gap-2.5">
                 {profileSteps.map((step) => (
@@ -269,7 +306,7 @@ export default function StudentProfilePage() {
                         onClick={() => setEditing(true)}
                         className="text-[12px] text-accent-primary font-medium ml-auto hover:underline"
                       >
-                        Заполнить
+                        {t('profile.fill')}
                       </button>
                     )}
                   </div>
@@ -288,7 +325,7 @@ export default function StudentProfilePage() {
                 onClick={() => setEditing(true)}
                 className="mt-4 flex items-center gap-2 px-4 py-2 rounded-xl bg-accent-primary text-white text-[13px] font-semibold hover:bg-accent-primary-hover transition-colors"
               >
-                Заполнить профиль
+                {t('profile.fillProfileBtn')}
                 <ChevronRight size={14} />
               </button>
             </div>
@@ -301,11 +338,54 @@ export default function StudentProfilePage() {
         <div>
           <div className="card-minimal p-6">
             <div className="text-center mb-6">
-              <div className="mx-auto mb-3 w-[72px] h-[72px]">
+              <div className="mx-auto mb-3 w-[72px] h-[72px] relative group">
                 <Avatar src={user?.avatar} alt={user?.username} size="xl" />
+                <button
+                  type="button"
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={avatarUploading}
+                  title={t('profile.changePhoto')}
+                  className="absolute inset-0 rounded-2xl bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity disabled:opacity-100"
+                >
+                  {avatarUploading ? <Loader2 size={22} className="animate-spin" /> : <Camera size={22} />}
+                </button>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = '';
+                    if (file) uploadAvatar(file);
+                  }}
+                />
               </div>
               <h2 className="font-heading font-semibold text-[17px] text-text-primary">{user?.username}</h2>
               <p className="text-[13px] text-text-muted mt-0.5">{user?.email}</p>
+              <div className="flex items-center justify-center gap-2 mt-2">
+                <button
+                  type="button"
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={avatarUploading}
+                  className="text-[12px] font-medium text-accent-primary hover:underline disabled:opacity-50"
+                >
+                  {t('profile.changePhoto')}
+                </button>
+                {user?.avatar && (
+                  <>
+                    <span className="text-text-subtle text-[12px]">·</span>
+                    <button
+                      type="button"
+                      onClick={removeAvatar}
+                      disabled={avatarUploading}
+                      className="text-[12px] font-medium text-text-muted hover:text-error transition-colors disabled:opacity-50"
+                    >
+                      {t('profile.removePhoto')}
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
 
             <div className="space-y-3.5">
@@ -313,25 +393,25 @@ export default function StudentProfilePage() {
                 <div className="w-9 h-9 rounded-xl bg-surface-hover flex items-center justify-center flex-shrink-0">
                   <GraduationCap size={16} className="text-text-muted" />
                 </div>
-                <span className="text-[13px] text-text-secondary truncate">{profile?.university || 'Университет не указан'}</span>
+                <span className="text-[13px] text-text-secondary truncate">{profile?.university || t('profile.universityNotSpecified')}</span>
               </div>
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-surface-hover flex items-center justify-center flex-shrink-0">
                   <BookOpen size={16} className="text-text-muted" />
                 </div>
-                <span className="text-[13px] text-text-secondary truncate">{profile?.faculty || 'Факультет не указан'}</span>
+                <span className="text-[13px] text-text-secondary truncate">{profile?.faculty || t('profile.facultyNotSpecified')}</span>
               </div>
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-surface-hover flex items-center justify-center flex-shrink-0">
                   <Calendar size={16} className="text-text-muted" />
                 </div>
-                <span className="text-[13px] text-text-secondary">{profile?.course ? `${profile.course} курс` : 'Курс не указан'}</span>
+                <span className="text-[13px] text-text-secondary">{profile?.course ? t('profile.courseN', { n: profile.course }) : t('profile.courseNotSpecified')}</span>
               </div>
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-surface-hover flex items-center justify-center flex-shrink-0">
                   <MapPin size={16} className="text-text-muted" />
                 </div>
-                <span className="text-[13px] text-text-secondary">{user?.location || profile?.city || 'Город не указан'}</span>
+                <span className="text-[13px] text-text-secondary">{user?.location || profile?.city || t('profile.cityNotSpecified')}</span>
               </div>
             </div>
 
@@ -341,7 +421,7 @@ export default function StudentProfilePage() {
                 className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-medium text-accent-primary bg-accent-primary/10 hover:bg-accent-primary/15 transition-colors"
               >
                 <Sparkles size={14} />
-                Рекомендации ИИ
+                {t('nav.recommendations')}
               </button>
             </div>
           </div>
@@ -352,43 +432,43 @@ export default function StudentProfilePage() {
           {/* Personal Data */}
           <div className="card-minimal p-4 sm:p-6">
             <div className="flex items-center justify-between mb-4 sm:mb-5">
-              <h3 className="font-heading font-semibold text-[14px] sm:text-[16px] text-text-primary">Личные данные</h3>
+              <h3 className="font-heading font-semibold text-[14px] sm:text-[16px] text-text-primary">{t('profile.personalData')}</h3>
               <button
                 onClick={() => setEditing(!editing)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium text-text-muted hover:text-text-primary hover:bg-surface-hover transition-colors"
               >
                 <Pencil size={13} />
-                {editing ? 'Отмена' : 'Редактировать'}
+                {editing ? t('common.cancel') : t('common.edit')}
               </button>
             </div>
 
             {editing ? (
               <div className="flex flex-col gap-4">
                 <Input
-                  label="Место проживания"
+                  label={t('profile.location')}
                   value={locationForm}
                   onChange={(e) => setLocationForm(e.target.value)}
                   placeholder="Душанбе, Таджикистан"
                 />
                 <Input
-                  label="Университет"
+                  label={t('profile.university')}
                   value={profileForm.university}
                   onChange={(e) => setProfileForm((f) => ({ ...f, university: e.target.value }))}
                 />
                 <Input
-                  label="Факультет"
+                  label={t('profile.faculty')}
                   value={profileForm.faculty}
                   onChange={(e) => setProfileForm((f) => ({ ...f, faculty: e.target.value }))}
                 />
                 <div className="grid grid-cols-2 gap-4">
                   <Input
-                    label="Курс"
+                    label={t('profile.course')}
                     type="number"
                     value={profileForm.course}
                     onChange={(e) => setProfileForm((f) => ({ ...f, course: e.target.value }))}
                   />
                   <Input
-                    label="Город"
+                    label={t('profile.city')}
                     value={profileForm.city}
                     onChange={(e) => setProfileForm((f) => ({ ...f, city: e.target.value }))}
                   />
@@ -397,37 +477,37 @@ export default function StudentProfilePage() {
                   onClick={saveProfile}
                   className="w-full py-2.5 rounded-xl bg-accent-primary text-white text-[14px] font-semibold hover:bg-accent-primary-hover transition-colors"
                 >
-                  Сохранить
+                  {t('common.save')}
                 </button>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="p-4 rounded-xl bg-surface-hover border border-border-default">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-text-subtle">Место проживания</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-text-subtle">{t('profile.location')}</span>
                   <p className={`text-[14px] mt-1 font-medium ${user?.location ? 'text-text-primary' : 'text-text-subtle'}`}>
                     {user?.location || '—'}
                   </p>
                 </div>
                 <div className="p-4 rounded-xl bg-surface-hover border border-border-default">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-text-subtle">Университет</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-text-subtle">{t('profile.university')}</span>
                   <p className={`text-[14px] mt-1 font-medium ${profile?.university ? 'text-text-primary' : 'text-text-subtle'}`}>
                     {profile?.university || '—'}
                   </p>
                 </div>
                 <div className="p-4 rounded-xl bg-surface-hover border border-border-default">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-text-subtle">Факультет</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-text-subtle">{t('profile.faculty')}</span>
                   <p className={`text-[14px] mt-1 font-medium ${profile?.faculty ? 'text-text-primary' : 'text-text-subtle'}`}>
                     {profile?.faculty || '—'}
                   </p>
                 </div>
                 <div className="p-4 rounded-xl bg-surface-hover border border-border-default">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-text-subtle">Курс</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-text-subtle">{t('profile.course')}</span>
                   <p className={`text-[14px] mt-1 font-medium ${profile?.course ? 'text-text-primary' : 'text-text-subtle'}`}>
                     {profile?.course || '—'}
                   </p>
                 </div>
                 <div className="p-4 rounded-xl bg-surface-hover border border-border-default">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-text-subtle">Город</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-text-subtle">{t('profile.city')}</span>
                   <p className={`text-[14px] mt-1 font-medium ${profile?.city ? 'text-text-primary' : 'text-text-subtle'}`}>
                     {profile?.city || '—'}
                   </p>
@@ -439,7 +519,7 @@ export default function StudentProfilePage() {
           {/* Resumes */}
           <div className="card-minimal p-4 sm:p-6">
             <div className="flex items-center justify-between mb-4 sm:mb-5">
-              <h3 className="font-heading font-semibold text-[14px] sm:text-[16px] text-text-primary">Резюме ({resumes.length})</h3>
+              <h3 className="font-heading font-semibold text-[14px] sm:text-[16px] text-text-primary">{t('profile.resumesCount', { n: resumes.length })}</h3>
               <div className="flex gap-1.5 sm:gap-2">
                 <button
                   onClick={() => setResumeGenOpen(true)}
@@ -447,7 +527,7 @@ export default function StudentProfilePage() {
                 >
                   <Sparkles size={11} className="sm:hidden" />
                   <Sparkles size={13} className="hidden sm:block" />
-                  ИИ (чат)
+                  {t('profile.aiChat')}
                 </button>
                 <button
                   onClick={() => { setEditingResume(null); setResumeModalOpen(true); }}
@@ -455,7 +535,7 @@ export default function StudentProfilePage() {
                 >
                   <Plus size={11} className="sm:hidden" />
                   <Plus size={13} className="hidden sm:block" />
-                  Создать
+                  {t('common.create')}
                 </button>
               </div>
             </div>
@@ -465,9 +545,9 @@ export default function StudentProfilePage() {
                 <div className="w-16 h-16 rounded-2xl bg-accent-primary/10 flex items-center justify-center mx-auto mb-4">
                   <FileText size={28} className="text-accent-primary" />
                 </div>
-                <h4 className="font-heading font-semibold text-lg text-text-primary mb-2">Создайте своё первое резюме</h4>
+                <h4 className="font-heading font-semibold text-lg text-text-primary mb-2">{t('profile.createFirstResume')}</h4>
                 <p className="text-[13px] text-text-muted mb-6 max-w-sm mx-auto">
-                  Резюме поможет работодателям найти вас. Создайте вручную или воспользуйтесь ИИ-генерацией.
+                  {t('profile.createFirstResumeDesc')}
                 </p>
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
                   <button
@@ -475,14 +555,14 @@ export default function StudentProfilePage() {
                     className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-semibold border border-accent-primary/30 bg-accent-primary/10 text-accent-primary hover:bg-accent-primary/15 transition-colors"
                   >
                     <Sparkles size={15} />
-                    Создать с ИИ (чат)
+                    {t('profile.createWithAI')}
                   </button>
                   <button
                     onClick={() => { setEditingResume(null); setResumeModalOpen(true); }}
                     className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-semibold bg-accent-primary text-white hover:bg-accent-primary-hover transition-colors"
                   >
                     <Plus size={15} />
-                    Создать вручную
+                    {t('profile.createManually')}
                   </button>
                 </div>
               </div>
@@ -492,7 +572,7 @@ export default function StudentProfilePage() {
                   <div key={resume.id} className="flex items-center justify-between p-4 rounded-xl bg-surface-hover border border-border-default hover:border-border-hover transition-colors">
                     <div className="flex-1 min-w-0">
                       <h4 className="text-[14px] font-medium text-text-primary">{resume.title}</h4>
-                      <p className="text-[12px] text-text-muted mt-0.5">Обновлено {formatDate(resume.updated_at)}</p>
+                      <p className="text-[12px] text-text-muted mt-0.5">{t('resume.updated')} {formatDate(resume.updated_at)}</p>
                       <div className="flex flex-wrap gap-1.5 mt-2">
                         {resume.style && (
                           <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-lg bg-surface-card border border-border-default text-text-muted">
@@ -511,9 +591,9 @@ export default function StudentProfilePage() {
                              GitHub
                            </a>
                          )}
-                         {resume.portfolio_url && (
-                           <a href={resume.portfolio_url} target="_blank" rel="noopener noreferrer" className="text-[11px] font-medium px-2 py-0.5 rounded-lg bg-surface-card border border-border-default text-accent-primary hover:text-accent-primary-hover transition-colors">
-                             Портфолио
+                          {resume.portfolio_url && (
+                            <a href={resume.portfolio_url} target="_blank" rel="noopener noreferrer" className="text-[11px] font-medium px-2 py-0.5 rounded-lg bg-surface-card border border-border-default text-accent-primary hover:text-accent-primary-hover transition-colors">
+                              {t('profile.portfolio')}
                            </a>
                          )}
                          {resume.linkedin_url && (
@@ -525,9 +605,9 @@ export default function StudentProfilePage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => downloadResumePDF(resume.id)}
+                        onClick={() => downloadResumePDF(resume.id, resume.style)}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold text-white bg-accent-primary hover:bg-accent-primary-hover transition-colors"
-                        title="Скачать PDF"
+                        title={t('profile.downloadPDF')}
                       >
                         <Download size={13} />
                         PDF
@@ -549,14 +629,14 @@ export default function StudentProfilePage() {
                           setResumeModalOpen(true);
                         }}
                         className="p-2 text-text-muted hover:text-text-primary hover:bg-surface-active rounded-lg transition-colors"
-                        title="Редактировать"
+                        title={t('common.edit')}
                       >
                         <Pencil size={14} />
                       </button>
                       <button
                         onClick={() => deleteResume(resume.id)}
                         className="p-2 text-text-muted hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
-                        title="Удалить"
+                        title={t('common.delete')}
                       >
                         <Trash2 size={14} />
                       </button>
@@ -573,7 +653,7 @@ export default function StudentProfilePage() {
       <Modal
         open={aiPreviewOpen}
         onClose={() => { setAiPreviewOpen(false); setAiResume(null); }}
-        title="ИИ сгенерировал резюме"
+        title={t('profile.aiResumeTitle')}
       >
         {aiResume && (
           <div className="flex flex-col gap-4">
@@ -603,7 +683,7 @@ export default function StudentProfilePage() {
             <div className="flex gap-3">
               <Button onClick={saveAIResume} className="flex-1">
                 <Sparkles size={14} className="mr-1" />
-                Отредактировать и сохранить
+                {t('profile.editAndSave')}
               </Button>
             </div>
           </div>
@@ -614,58 +694,58 @@ export default function StudentProfilePage() {
       <Modal
         open={resumeModalOpen}
         onClose={() => { setResumeModalOpen(false); setEditingResume(null); }}
-        title={editingResume ? 'Редактировать резюме' : 'Новое резюме'}
+        title={editingResume ? t('profile.editResume') : t('profile.newResume')}
       >
         <div className="flex flex-col gap-4">
           <Input
-            label="Желаемая должность"
+            label={t('resume.desiredPosition')}
             value={resumeForm.title}
             onChange={(e) => setResumeForm((f) => ({ ...f, title: e.target.value }))}
             placeholder="Frontend Developer"
           />
           <Textarea
-            label="О себе"
+            label={t('resume.about')}
             value={resumeForm.about}
             onChange={(e) => setResumeForm((f) => ({ ...f, about: e.target.value }))}
-            placeholder="Расскажите о себе..."
+            placeholder={t('resume.aboutPlaceholder')}
           />
           <Input
-            label="Навыки (через запятую)"
+            label={t('resume.skillsComma')}
             value={resumeForm.skills}
             onChange={(e) => setResumeForm((f) => ({ ...f, skills: e.target.value }))}
             placeholder="JavaScript, React, TypeScript"
           />
           <div className="grid grid-cols-2 gap-4">
             <Select
-              label="График"
+              label={t('employer.schedule')}
               value={resumeForm.schedule_type}
               onChange={(value) => setResumeForm((f) => ({ ...f, schedule_type: value }))}
               options={[
-                { value: 'flexible', label: 'Гибкий' },
-                { value: 'part_time', label: '2-4 часа' },
-                { value: 'full_time', label: 'Полная занятость' },
+                { value: 'flexible', label: t('schedule.flexible') },
+                { value: 'part_time', label: t('schedule.part_time') },
+                { value: 'full_time', label: t('schedule.full_time') },
               ]}
             />
             <Select
-              label="Формат"
+              label={t('employer.workFormat')}
               value={resumeForm.work_format}
               onChange={(value) => setResumeForm((f) => ({ ...f, work_format: value }))}
               options={[
-                { value: 'online', label: 'Онлайн' },
-                { value: 'offline', label: 'Офлайн' },
-                { value: 'hybrid', label: 'Гибрид' },
+                { value: 'online', label: t('workFormat.online') },
+                { value: 'offline', label: t('workFormat.offline') },
+                { value: 'hybrid', label: t('workFormat.hybrid') },
               ]}
             />
           </div>
           <div className="relative">
             <ResumeStyleSelector
-              label="Стиль резюме"
+              label={t('resume.styleLabel')}
               value={resumeForm.style}
               onChange={(style) => setResumeForm((f) => ({ ...f, style }))}
             />
           </div>
           <div className="border-t border-border-default pt-4 mt-2">
-            <p className="text-[12px] text-text-muted mb-3">Необязательные ссылки</p>
+            <p className="text-[12px] text-text-muted mb-3">{t('resume.optionalLinks')}</p>
             <div className="flex flex-col gap-3">
               <Input
                 label="GitHub"
@@ -674,7 +754,7 @@ export default function StudentProfilePage() {
                 placeholder="https://github.com/username"
               />
               <Input
-                label="Портфолио"
+                label={t('profile.portfolio')}
                 value={resumeForm.portfolio_url}
                 onChange={(e) => setResumeForm((f) => ({ ...f, portfolio_url: e.target.value }))}
                 placeholder="https://mysite.com"
@@ -688,7 +768,7 @@ export default function StudentProfilePage() {
             </div>
           </div>
           <Button onClick={saveResume}>
-            {editingResume ? 'Сохранить' : 'Создать'}
+            {editingResume ? t('common.save') : t('common.create')}
           </Button>
         </div>
       </Modal>

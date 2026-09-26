@@ -8,7 +8,7 @@ import JobFilters from '@/components/jobs/JobFilters';
 import JobCard from '@/components/jobs/JobCard';
 import Card from '@/components/ui/Card';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
-import { showToast, getErrorMessage, formatVacancyWord } from '@/lib/utils';
+import { showToast, getErrorMessage, formatVacancyWord, getApplicationJobId } from '@/lib/utils';
 import { useI18n } from '@/i18n/I18nContext';
 import type { Job, PaginatedResponse } from '@/types';
 
@@ -38,7 +38,6 @@ export default function JobsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [count, setCount] = useState(0);
-  const [page, setPage] = useState(1);
   const [favorites, setFavorites] = useState<number[]>([]);
   const [appliedJobs, setAppliedJobs] = useState<number[]>([]);
   const [filters, setFilters] = useState<Filters>(initialFilters);
@@ -83,7 +82,11 @@ export default function JobsPage() {
       api.get('/applications/').then((res) => {
         const data = res.data;
         const list = data.results || data;
-        setAppliedJobs(list.map((a: { job: number }) => a.job));
+        setAppliedJobs(
+          list
+            .map((a: { job: unknown }) => getApplicationJobId(a.job))
+            .filter((id: number | null): id is number => id !== null)
+        );
       }).catch(() => {});
     }
   }, [user]);
@@ -115,11 +118,16 @@ export default function JobsPage() {
   const hasActiveFilters = filters.category || filters.schedule || filters.work_format || filters.experience || filters.no_experience;
 
   const totalPages = Math.ceil(count / 10);
+  const page = filters.page;
 
   const paginationNumbers = Array.from({ length: totalPages }, (_, i) => i + 1).slice(
     Math.max(0, page - 2),
     Math.min(totalPages, page + 2)
   );
+
+  const goToPage = (p: number) => {
+    setFilters((prev) => ({ ...prev, page: Math.min(Math.max(1, p), Math.max(1, totalPages)) }));
+  };
 
   return (
     <div className="min-h-screen bg-bg-primary">
@@ -242,7 +250,7 @@ export default function JobsPage() {
                 {totalPages > 1 && (
                   <nav className="flex items-center justify-center gap-2 mt-10" aria-label={t('jobs.pagination')}>
                     <button
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      onClick={() => goToPage(page - 1)}
                       disabled={page === 1}
                       className="w-10 h-10 rounded-xl border border-border-default bg-surface-card text-text-muted hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
                       aria-label={t('jobs.prevPage')}
@@ -254,7 +262,7 @@ export default function JobsPage() {
                     {page > 3 && (
                       <>
                         <button
-                          onClick={() => setPage(1)}
+                          onClick={() => goToPage(1)}
                           className={`w-10 h-10 rounded-xl flex items-center justify-center text-[13px] font-medium transition-colors ${page === 1 ? 'bg-accent-primary text-white' : 'border border-border-default bg-surface-card text-text-muted hover:bg-surface-hover'}`}
                           aria-label={t('jobs.pageN', { n: 1 })}
                         >
@@ -266,7 +274,7 @@ export default function JobsPage() {
                     {paginationNumbers.map((p) => (
                       <button
                         key={p}
-                        onClick={() => setPage(p)}
+                        onClick={() => goToPage(p)}
                         className={`w-10 h-10 rounded-xl flex items-center justify-center text-[13px] font-medium transition-colors ${page === p ? 'bg-accent-primary text-white' : 'border border-border-default bg-surface-card text-text-muted hover:bg-surface-hover'}`}
                         aria-label={t('jobs.pageN', { n: p })}
                         aria-current={page === p ? 'page' : undefined}
@@ -278,7 +286,7 @@ export default function JobsPage() {
                       <>
                         {page < totalPages - 3 && <span className="w-10 h-10 flex items-center justify-center text-text-muted text-[13px]">...</span>}
                         <button
-                          onClick={() => setPage(totalPages)}
+                          onClick={() => goToPage(totalPages)}
                           className={`w-10 h-10 rounded-xl flex items-center justify-center text-[13px] font-medium transition-colors ${page === totalPages ? 'bg-accent-primary text-white' : 'border border-border-default bg-surface-card text-text-muted hover:bg-surface-hover'}`}
                           aria-label={t('jobs.pageN', { n: totalPages })}
                         >
@@ -287,7 +295,7 @@ export default function JobsPage() {
                       </>
                     )}
                     <button
-                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      onClick={() => goToPage(page + 1)}
                       disabled={page === totalPages}
                       className="w-10 h-10 rounded-xl border border-border-default bg-surface-card text-text-muted hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
                       aria-label={t('jobs.nextPage')}

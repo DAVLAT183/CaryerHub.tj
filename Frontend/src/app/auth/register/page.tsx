@@ -44,7 +44,7 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await register({ ...form, role });
-      router.push(role === 'student' ? '/profile/student' : '/profile/employer');
+      router.push(`/auth/verify-email?email=${encodeURIComponent(form.email)}`);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {

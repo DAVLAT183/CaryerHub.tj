@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Send, User as UserIcon, Building2, ArrowLeft, MessageSquare } from 'lucide-react';
 import api from '@/lib/api';
 import Button from '@/components/ui/Button';
-import { showToast, getErrorMessage } from '@/lib/utils';
+import { showToast, getErrorMessage, mediaUrl } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useWebSocket } from '@/hooks/useWebSocket';
 
@@ -177,7 +177,7 @@ export default function EmployerChat({ initialUserId }: EmployerChatProps) {
             </button>
             <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[var(--color-surface-hover)] flex items-center justify-center flex-shrink-0">
               {activeUser.avatar ? (
-                <img src={activeUser.avatar} alt="" className="w-full h-full rounded-full object-cover" />
+                <img src={mediaUrl(activeUser.avatar)} alt="" className="w-full h-full rounded-full object-cover" />
               ) : isStudent ? (
                 <Building2 size={14} className="text-[var(--color-text-muted)] sm:hidden" />
               ) : (
@@ -275,7 +275,7 @@ export default function EmployerChat({ initialUserId }: EmployerChatProps) {
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-[var(--color-surface-hover)] flex items-center justify-center flex-shrink-0">
                   {conv.user.avatar ? (
-                    <img src={conv.user.avatar} alt="" className="w-full h-full rounded-full object-cover" />
+                    <img src={mediaUrl(conv.user.avatar)} alt="" className="w-full h-full rounded-full object-cover" />
                   ) : isStudent ? (
                     <Building2 size={16} className="text-[var(--color-text-muted)]" />
                   ) : (

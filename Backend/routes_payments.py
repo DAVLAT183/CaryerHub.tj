@@ -12,7 +12,7 @@ from models import (
 from schemas import (
     TariffPlanSchema, UserSubscriptionSchema, PaymentSchema, CreatePaymentSchema,
 )
-from auth import get_current_user
+from auth import get_current_user, require_verified_email
 from payment_service import payment_service, EXPRESS_PAY_BASE_URL
 
 payments_router = APIRouter(prefix="/payments", tags=["Payments"])
@@ -24,7 +24,7 @@ payments_router = APIRouter(prefix="/payments", tags=["Payments"])
 @payments_router.post("/create/")
 async def create_payment(
     data: CreatePaymentSchema,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -172,7 +172,7 @@ async def payment_webhook(data: dict, db: AsyncSession = Depends(get_db)):
 
 @payments_router.get("/my-subscription/")
 async def get_my_subscription(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -215,7 +215,7 @@ async def get_my_subscription(
 
 @payments_router.get("/history/")
 async def payment_history(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -300,7 +300,7 @@ PLAN_FEATURES = {
 @payments_router.get("/check-access/")
 async def check_access(
     feature: str = Query(..., description="Feature name to check"),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     plan_name = user.current_plan or "free"

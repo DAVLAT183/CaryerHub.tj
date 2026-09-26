@@ -201,7 +201,7 @@ export default function ResumeStyleSelector({
             animation: 'fadeSlideIn 120ms ease-out',
           }}
         >
-          {STYLE_OPTIONS.map((option, index) => {
+          {localizedOptions.map((option, index) => {
             const isSelected = option.value === value;
             const isFocused = index === focusedIndex;
 

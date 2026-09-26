@@ -32,7 +32,7 @@ export default function LoginPage() {
   const checkVerification = async () => {
     try {
       const res = await api.get('/auth/check-verification/');
-      setEmailVerified(res.data.is_verified);
+      setEmailVerified(res.data.is_email_verified);
     } catch {
       setEmailVerified(null);
     }

@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import api, { saveTokens, removeTokens } from '@/lib/api';
+import api, { saveTokens, removeTokens, setEmailVerified } from '@/lib/api';
 import type { User } from '@/types';
 
 interface AuthContextType {
@@ -30,6 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const res = await api.get('/users/me/');
       setUser(res.data);
+      setEmailVerified(!!res.data.is_email_verified);
     } catch (err) {
       const axiosError = err as { response?: { status?: number } };
       if (axiosError.response?.status === 401) {
@@ -48,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (username: string, password: string) => {
     const res = await api.post('/auth/login/', { username, password });
     saveTokens(res.data.access, res.data.refresh);
+    setEmailVerified(!!res.data.user?.is_email_verified);
     await fetchUser();
   };
 

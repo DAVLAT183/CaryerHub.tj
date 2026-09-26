@@ -138,6 +138,10 @@
     "website": "Веб-сайт",
     "address": "Суроға",
     "avatar": "Аватар",
+    "changePhoto": "Иваз кардани тасвир",
+    "removePhoto": "Ҳазф кардани тасвир",
+    "photoUpdated": "Тасвири профил навсозӣ шуд",
+    "photoRemoved": "Тасвири профил ҳазф шуд",
     "saveChanges": "Сабти тағйирот",
     "profileUpdated": "Профил навсозӣ шуд",
     "profileError": "Хатогӣ ҳангоми навсозии профил",
@@ -163,7 +167,18 @@
     "editResume": "Таҳрири резюме",
     "newResume": "Резюмеи нав",
     "profileCompletion": "Пуррагии профил",
-    "companyNotSpecified": "Ширкат мушахҳас нест"
+    "companyNotSpecified": "Ширкат мушахҳас нест",
+    "profileSaved": "Профил нигоҳ дошта шуд",
+    "confirmDeleteResume": "Резюме нобуд карда шавад?",
+    "resumeDeleted": "Резюме нобуд карда шуд",
+    "resumeGenerated": "Резюме эҷод шуд!",
+    "fillProfileProgress": "Барои он ки корфармоён шуморо ёбанд, ҳамаи маълумотро пур кунед. {completed} аз {total} пур шуд.",
+    "courseN": "Курси {n}",
+    "createWithAI": "Бо ИИ эҷод кунед (чат)",
+    "portfolio": "Портфолио",
+    "downloadPDF": "Боргирӣ кардани PDF",
+    "aiResumeTitle": "ИИ резюме эҷод кард",
+    "editAndSave": "Таҳрир ва нигоҳ доштан"
   },
   "jobs": {
     "title": "Вакансияҳо",
@@ -226,7 +241,33 @@
     "extra": "Иловагӣ",
     "noExpOnly": "Танҳо бе таҷриба",
     "details": "Тафсилот",
-    "onMap": "Дар харита"
+    "onMap": "Дар харита",
+    "routeTitle": "Масир то ҷойи кор",
+    "buildRoute": "Сохтани масир",
+    "routeIntro": "Масир аз ҷойи зисти шумо ({location}) то ҷойи кор созед",
+    "routeLabel": "Масир",
+    "routeErrorDefault": "Сохтани масир ғайриимкон шуд",
+    "analyzingRoute": "Таҳлили масир...",
+    "distance": "Дурӣ",
+    "travelTime": "Вақти роҳ",
+    "fromWhere": "Аз куҷо",
+    "you": "Шумо",
+    "meters": "{n} м",
+    "hideRoute": "Пинҳон кардани масир",
+    "minAgeYears": "Синни аз камтарин: {n}",
+    "noExpRequired": "Таҷриба талаб намешавад",
+    "descriptionTitle": "Тавсиф",
+    "locationOnMap": "Ҷойгиршавӣ дар харита",
+    "openInMaps": "Кушодан дар харитаҳо",
+    "specifyLocation": "Ҷойи зистро нишон диҳед",
+    "specifyLocationDesc": "Барои сохтани масир, шаҳри худро нишон диҳед",
+    "inSettings": "дар танзимот",
+    "jobNotFound": "Ҷойи кор ёфт нашуд",
+    "backToAll": "← Ба ҳамаи ҷойҳои корӣ",
+    "applySent": "Дархост фиристода шуд!",
+    "applyOnSite": "Дар сомона муроҷиат кунед",
+    "applyLocal": "Дар CareerHub муроҷиат кунед",
+    "pdfDownloaded": "PDF боргирӣ шуд"
   },
   "categories": {
     "programming": "Барномасозӣ",
@@ -285,7 +326,11 @@
     "generatedByAI": "Бо ИИ эҷод шудааст",
     "skillsPlaceholder": "Маҳоратҳо бо вергул",
     "aboutPlaceholder": "Дар бораи худ, таҷриба, дастовардҳо...",
-    "titlePlaceholder": "Мисол: Junior Python Developer"
+    "titlePlaceholder": "Мисол: Junior Python Developer",
+    "updated": "Навсозӣ шуд",
+    "skillsComma": "Маҳоратҳо (аз ҷудои вергул)",
+    "styleLabel": "Стили резюме",
+    "optionalLinks": "Пайвастшудаҳои ихтиёрӣ"
   },
   "resumeStyles": {
     "classic": "Классикӣ",
@@ -331,6 +376,7 @@
     "emptyStudent": "Барои пайдо шудан дар инҷо ба вакансия муроҷиат кунед",
     "emptyEmployer": "Ҳанӯз касе ба вакансияҳои шумо муроҷиат накардааст",
     "statusUpdated": "Ҳолат навсозӣ шуд",
+    "newApplication": "Муроҷиати нав ба ҷойи кор!",
     "from": "Аз: {name}",
     "status": {
       "sent": "Фиристода",
@@ -356,6 +402,7 @@
     "minAge": "Камтарин синн",
     "experienceRequired": "Таҷриба лозим аст",
     "isActive": "Фаъол",
+    "verified": "Санҷида шуд",
     "jobCreated": "Вакансия эҷод шуд",
     "jobUpdated": "Вакансия навсозӣ шуд",
     "jobDeleted": "Вакансия нест карда шуд"
@@ -459,7 +506,13 @@
     "twoFactorDesc": "Ҳифзи иловагии ҳисоб",
     "soon": "Танзим кардан (ҳоло нест)",
     "deleteAccount": "Нест кардани ҳисоб",
-    "deleteAccountDesc": "Несткунии баргарданнопазири ҳамаи маълумот"
+    "deleteAccountDesc": "Несткунии баргарданнопазири ҳамаи маълумот",
+    "profileSaved": "Профил нигоҳ дошта шуд",
+    "notifSaved": "Танзимоти огоҳиномаҳо нигоҳ дошта шуд",
+    "fillAllPwdFields": "Ҳама майдонҳои рамзро пур кунед",
+    "pwdMin8": "Рами нав набояд камтар аз 8 ҳарф бошад",
+    "pwdChanged": "Рамз бо муваффақият иваз шуд",
+    "dataExported": "Маълумот содир карда шуд"
   },
   "notifications": {
     "jobCreated": "Вакансия бо муваффақият эҷод шуд",
@@ -501,8 +554,8 @@
   },
   "salary": {
     "notSpecified": "Маош мушахҳас нест",
-    "from": "аз {n} ₽",
-    "to": "то {n} ₽"
+    "from": "аз {n} см",
+    "to": "то {n} см"
   },
   "errors": {
     "unauthorized": "Авторизатсия лозим аст",

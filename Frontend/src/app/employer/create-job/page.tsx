@@ -107,14 +107,14 @@ export default function CreateJobPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <Input
-                  label="Зарплата от (₽)"
+                  label="Зарплата от (см)"
                   type="number"
                   placeholder="30000"
                   value={form.salary_min}
                   onChange={(e) => update('salary_min', e.target.value)}
                 />
                 <Input
-                  label="Зарплата до (₽)"
+                  label="Зарплата до (см)"
                   type="number"
                   placeholder="50000"
                   value={form.salary_max}
@@ -189,10 +189,10 @@ export default function CreateJobPage() {
               {(form.salary_min || form.salary_max) && (
                 <p className="text-xs text-accent mb-2">
                   {form.salary_min && form.salary_max
-                    ? `${Number(form.salary_min).toLocaleString()} – ${Number(form.salary_max).toLocaleString()} ₽`
+                    ? `${Number(form.salary_min).toLocaleString()} – ${Number(form.salary_max).toLocaleString()} см`
                     : form.salary_min
-                    ? `от ${Number(form.salary_min).toLocaleString()} ₽`
-                    : `до ${Number(form.salary_max).toLocaleString()} ₽`
+                    ? `от ${Number(form.salary_min).toLocaleString()} см`
+                    : `до ${Number(form.salary_max).toLocaleString()} см`
                   }
                 </p>
               )}

@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+import secrets
 from jose import JWTError, jwt
 import bcrypt
 from fastapi import Depends, HTTPException, status
@@ -47,6 +48,10 @@ def decode_token(token: str) -> Optional[dict]:
         return None
 
 
+def generate_verification_code() -> str:
+    return f"{secrets.randbelow(1000000):06d}"
+
+
 async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: AsyncSession = Depends(get_db),
@@ -66,6 +71,15 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    return user
+
+
+async def require_verified_email(user: User = Depends(get_current_user)) -> User:
+    if not user.is_email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"message": "Email not verified", "code": "email_not_verified"},
+        )
     return user
 
 

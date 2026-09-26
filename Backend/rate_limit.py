@@ -14,7 +14,14 @@ DEFAULT_WINDOW_SECONDS = 60
 AUTH_LIMIT = 20
 AUTH_WINDOW_SECONDS = 60
 
-_auth_paths = ("/api/auth/login/", "/api/auth/register/", "/api/auth/token/refresh/")
+_auth_paths = (
+    "/api/auth/login/",
+    "/api/auth/register/",
+    "/api/auth/token/refresh/",
+    "/api/auth/send-verification/",
+    "/api/auth/verify-code/",
+    "/api/auth/password-reset/",
+)
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):

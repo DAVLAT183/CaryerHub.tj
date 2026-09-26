@@ -94,15 +94,24 @@ export default function MiniAIChat() {
         <button
           type="button"
           onClick={toggleChat}
-          className="group w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-accent-primary to-accent-cyan text-white flex items-center justify-center shadow-[0_8px_24px_rgba(16,185,129,0.35)] hover:shadow-[0_10px_28px_rgba(16,185,129,0.45)] hover:scale-105 active:scale-95 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary focus-visible:ring-offset-2"
+          className="group w-12 h-12 sm:w-14 sm:h-14 rounded-full text-white flex items-center justify-center bg-[linear-gradient(135deg,#1FA6F0_0%,#1580E8_100%)] shadow-[0_10px_28px_-6px_rgba(21,128,232,0.45),0_0_24px_rgba(31,166,240,0.25)] hover:shadow-[0_14px_34px_-6px_rgba(21,128,232,0.6),0_0_32px_rgba(31,166,240,0.4)] hover:scale-105 active:scale-95 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1FA6F0] focus-visible:ring-offset-2"
           aria-label="Открыть AI чат"
         >
-          <img
-            src="/robot-avatar.svg"
-            alt=""
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
             aria-hidden="true"
-            className="w-5 h-5 sm:w-6 sm:h-6 group-hover:rotate-12 transition-transform duration-200"
-          />
+            className="w-5 h-5 sm:w-6 sm:h-6 drop-shadow-sm transition-transform duration-200 group-hover:-translate-y-0.5"
+          >
+            <path d="M8 4h8a4 4 0 0 1 4 4v6a4 4 0 0 1-4 4H8l-4 4V8a4 4 0 0 1 4-4z" />
+            <circle cx="8.4" cy="11" r="1.45" fill="currentColor" stroke="none" />
+            <circle cx="12" cy="11" r="1.45" fill="currentColor" stroke="none" />
+            <circle cx="15.6" cy="11" r="1.45" fill="currentColor" stroke="none" />
+          </svg>
         </button>
       )}
 

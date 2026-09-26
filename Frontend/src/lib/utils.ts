@@ -23,7 +23,7 @@ export function formatDate(dateStr: string): string {
 export function formatSalary(min: number | null, max: number | null): string {
   if (!min && !max) return translate('salary.notSpecified');
   const tag = getLocaleTag();
-  if (min && max) return `${min.toLocaleString(tag)} – ${max.toLocaleString(tag)} ₽`;
+  if (min && max) return `${min.toLocaleString(tag)} – ${max.toLocaleString(tag)} см`;
   if (min) return translate('salary.from', { n: min.toLocaleString(tag) });
   return translate('salary.to', { n: max!.toLocaleString(tag) });
 }
@@ -61,6 +61,28 @@ export function formatVacancyWord(count: number): string {
   if (lastOne === 1) return translate('jobs.vacancyOne');
   if (lastOne >= 2 && lastOne <= 4) return translate('jobs.vacancyFew');
   return translate('jobs.vacancyMany');
+}
+
+export const JOB_SOURCES: Record<string, { name: string; siteUrl: string }> = {
+  'somon.tj': { name: 'somon.tj', siteUrl: 'https://somon.tj' },
+  remotive: { name: 'Remotive', siteUrl: 'https://remotive.com' },
+  arbeitnow: { name: 'Arbeitnow', siteUrl: 'https://www.arbeitnow.com' },
+  himalayas: { name: 'Himalayas', siteUrl: 'https://himalayas.app' },
+  linkedin: { name: 'LinkedIn', siteUrl: 'https://www.linkedin.com' },
+};
+
+export function getJobSource(source?: string | null): { name: string; siteUrl: string } | null {
+  if (!source || source === 'manual') return null;
+  return JOB_SOURCES[source] || { name: source, siteUrl: '' };
+}
+
+export function getApplicationJobId(job: unknown): number | null {
+  if (typeof job === 'number') return job;
+  if (job && typeof job === 'object' && 'id' in job) {
+    const id = (job as { id: unknown }).id;
+    return typeof id === 'number' ? id : null;
+  }
+  return null;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -131,7 +153,23 @@ export function getErrorMessage(error: unknown): string {
     const data = err.response?.data;
     if (data && typeof data === 'object' && !(data instanceof Blob)) {
       const obj = data as Record<string, unknown>;
-      if ('detail' in obj) return String(obj.detail);
+      if ('detail' in obj) {
+        const detail = obj.detail;
+        if (Array.isArray(detail)) {
+          const parts = detail.map((item) => {
+            if (item && typeof item === 'object' && 'msg' in item) {
+              const loc = Array.isArray((item as { loc?: unknown }).loc)
+                ? (item as { loc: unknown[] }).loc.filter((l) => typeof l === 'string' && l !== 'body').join('.')
+                : '';
+              const msg = String((item as { msg: unknown }).msg);
+              return loc ? `${loc}: ${msg}` : msg;
+            }
+            return String(item);
+          });
+          if (parts.length) return parts.join('\n');
+        }
+        return String(detail);
+      }
       if ('non_field_errors' in obj) return String(Array.isArray(obj.non_field_errors) ? obj.non_field_errors[0] : obj.non_field_errors);
       const firstKey = Object.keys(obj)[0];
       if (firstKey) {

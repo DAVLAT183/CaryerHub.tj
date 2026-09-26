@@ -1,8 +1,6 @@
 import io
+import logging
 import uuid
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -18,35 +16,13 @@ from models import (
     StudentProfile, Notification,
 )
 from schemas import TariffPlanSchema
-from auth import get_current_user, hash_password, verify_password
+from auth import get_current_user, get_optional_user, hash_password, verify_password, require_verified_email, generate_verification_code
 from config import settings
+from email_service import send_email, send_verification_email
 from job_parser import parse_somon_tj
 
 extras_router = APIRouter(prefix="/api", tags=["Extras"])
-
-SMTP_HOST = "smtp.gmail.com"
-SMTP_PORT = 587
-SMTP_USER = settings.__dict__.get("SMTP_USER", "")
-SMTP_PASS = settings.__dict__.get("SMTP_PASS", "")
-SMTP_FROM = settings.__dict__.get("SMTP_FROM", "noreply@careerhub.tj")
-
-
-def _send_email(to_email: str, subject: str, html_body: str):
-    if not SMTP_USER:
-        return
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = SMTP_FROM
-    msg["To"] = to_email
-    msg.attach(MIMEText(html_body, "html", "utf-8"))
-
-    try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
-            server.send_message(msg)
-    except Exception:
-        pass
+logger = logging.getLogger("careerhub")
 
 
 # ──────────────────────────── Email Verification ────────────────────────────
@@ -54,48 +30,57 @@ def _send_email(to_email: str, subject: str, html_body: str):
 
 @extras_router.post("/auth/send-verification/")
 async def send_verification(
-    user: User = Depends(get_current_user),
+    data: dict | None = None,
+    user: User | None = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if user.is_email_verified:
+    email = (data or {}).get("email") or (user.email if user else None)
+    if not email:
+        raise HTTPException(status_code=400, detail="Email required")
+
+    result = await db.execute(select(User).where(User.email == email))
+    target = result.scalar_one_or_none()
+    if not target:
+        return {"detail": "If the email exists, a verification link has been sent"}
+
+    if user and user.id != target.id:
+        raise HTTPException(status_code=403, detail="Cannot send verification for another email")
+
+    if target.is_email_verified:
         return {"detail": "Email is already verified"}
 
     result = await db.execute(
         select(EmailVerification)
-        .where(EmailVerification.user_id == user.id, EmailVerification.is_used == False)
+        .where(EmailVerification.user_id == target.id, EmailVerification.is_used == False)
         .order_by(EmailVerification.created_at.desc())
     )
     existing = result.scalar_one_or_none()
-    if existing:
+    if existing and existing.token.isdigit() and len(existing.token) == 6:
         token = existing.token
     else:
-        token = str(uuid.uuid4())
-        ev = EmailVerification(user_id=user.id, token=token)
-        db.add(ev)
+        token = generate_verification_code()
+        if existing:
+            existing.is_used = True
+        db.add(EmailVerification(user_id=target.id, token=token))
         await db.commit()
 
-    verify_url = f"{settings.FRONTEND_URL}/auth/verify-email?token={token}"
-
-    _send_email(
-        to_email=user.email,
-        subject="CareerHub - Verify your email",
-        html_body=f"""
-        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
-            <h2>Email Verification</h2>
-            <p>Hi {user.first_name or user.username},</p>
-            <p>Click the link below to verify your email address:</p>
-            <a href="{verify_url}"
-               style="display:inline-block;padding:12px 24px;background:#4F46E5;color:#fff;
-                      text-decoration:none;border-radius:6px;margin:16px 0;">
-                Verify Email
-            </a>
-            <p style="color:#666;font-size:13px;">Or copy this link: {verify_url}</p>
-            <p style="color:#999;font-size:12px;">This link expires in 24 hours.</p>
-        </div>
-        """,
+    sent = send_verification_email(
+        to_email=target.email,
+        name=target.first_name or target.username,
+        token=token,
     )
+    if not sent:
+        if not (settings.EMAIL_HOST_USER and settings.EMAIL_HOST_PASSWORD):
+            logger.warning(
+                "SMTP не настроен — код подтверждения для %s: %s", target.email, token
+            )
+            return {
+                "detail": "SMTP не настроен: код подтверждения выведен в консоль сервера",
+                "dev_code": token,
+            }
+        raise HTTPException(status_code=500, detail="Failed to send verification email")
 
-    return {"detail": "Verification email sent", "token": token}
+    return {"detail": "Verification email sent"}
 
 
 @extras_router.get("/auth/verify-email/")
@@ -134,6 +119,41 @@ async def check_verification(
     return {"is_email_verified": user.is_email_verified}
 
 
+@extras_router.post("/auth/verify-code/")
+async def verify_code(
+    data: dict,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    code = str((data or {}).get("code") or "").strip()
+    if len(code) != 6 or not code.isdigit():
+        raise HTTPException(status_code=400, detail="Введите 6-значный код")
+
+    if user.is_email_verified:
+        return {"detail": "Email already verified", "is_email_verified": True}
+
+    result = await db.execute(
+        select(EmailVerification)
+        .where(
+            EmailVerification.user_id == user.id,
+            EmailVerification.token == code,
+            EmailVerification.is_used == False,
+        )
+        .order_by(EmailVerification.created_at.desc())
+    )
+    ev = result.scalar_one_or_none()
+    if not ev:
+        raise HTTPException(status_code=400, detail="Неверный код")
+
+    if (datetime.now(timezone.utc) - ev.created_at.replace(tzinfo=timezone.utc)) > timedelta(hours=24):
+        raise HTTPException(status_code=400, detail="Срок действия кода истёк, запросите новый")
+
+    ev.is_used = True
+    user.is_email_verified = True
+    await db.commit()
+    return {"detail": "Email verified successfully", "is_email_verified": True}
+
+
 # ──────────────────────────── Password Reset ────────────────────────────
 
 
@@ -159,7 +179,7 @@ async def request_password_reset(
 
     reset_url = f"{settings.FRONTEND_URL}/auth/password-reset-confirm?token={token}"
 
-    _send_email(
+    send_email(
         to_email=user.email,
         subject="CareerHub - Password Reset",
         html_body=f"""
@@ -240,7 +260,7 @@ async def _geocode(query: str) -> dict:
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.get(
             "https://nominatim.openstreetmap.org/search",
-            params={"q": query, "format": "json", "limit": 1},
+            params={"q": query, "format": "json", "limit": 5},
             headers={"User-Agent": "CareerHub/1.0"},
         )
         resp.raise_for_status()
@@ -249,11 +269,20 @@ async def _geocode(query: str) -> dict:
     if not results:
         return {}
 
-    r = results[0]
+    best = results[0]
+    for item in results:
+        display = (item.get("display_name") or "").lower()
+        if any(
+            key in display
+            for key in ("tajikistan", "таджикистан", "dushanbe", "душанбе", "khujand", "худжанд")
+        ):
+            best = item
+            break
+
     return {
-        "lat": float(r["lat"]),
-        "lon": float(r["lon"]),
-        "display_name": r.get("display_name", ""),
+        "lat": float(best["lat"]),
+        "lon": float(best["lon"]),
+        "display_name": best.get("display_name", ""),
     }
 
 
@@ -288,25 +317,87 @@ async def _route_osrm(lat1: float, lon1: float, lat2: float, lon2: float) -> dic
     return {
         "distance_m": round(route.get("distance", 0)),
         "duration_s": round(route.get("duration", 0)),
+        "polyline": route.get("geometry", {}).get("coordinates", []),
         "steps": steps,
     }
 
 
+def _format_duration(duration_s: int) -> str:
+    total_min = round(duration_s / 60)
+    hours, minutes = divmod(total_min, 60)
+    if hours > 0:
+        return f"{hours} ч {minutes} мин"
+    return f"{minutes} мин"
+
+
+def _step_text(instruction: str, step_type: str, modifier: str) -> str:
+    directions = {
+        "left": "налево",
+        "right": "направо",
+        "slight left": "легкое поворот налево",
+        "slight right": "легкое поворот направо",
+        "uturn": "разворот",
+    }
+    if step_type == "depart":
+        return "Начните движение"
+    if step_type == "arrive":
+        return "Прибытие"
+    if step_type == "turn":
+        text = f"Поверните {directions.get(modifier, 'поворот')}"
+        if instruction:
+            text += f" на {instruction}"
+        return text
+    if step_type == "new name":
+        return f"Продолжайте по {instruction}" if instruction else "Продолжайте движение"
+    if step_type == "merge":
+        return "Встаньте на полосу"
+    if step_type == "roundabout":
+        return "На круговом движении"
+    text = step_type.replace("_", " ").capitalize() if step_type else ""
+    if instruction:
+        text = f"{text} ({instruction})" if text else instruction
+    return text or "Продолжайте движение"
+
+
 @extras_router.post("/route/")
 async def calculate_route(data: dict):
-    origin = data.get("origin", "")
-    destination = data.get("destination", "")
+    user_location = str(data.get("user_location") or "").strip()
+    job_lat = data.get("job_lat")
+    job_lng = data.get("job_lng")
 
-    if not origin or not destination:
-        raise HTTPException(status_code=400, detail="origin and destination required")
+    origin = ""
+    destination = ""
 
-    origin_coords = await _geocode(origin)
-    if not origin_coords:
-        raise HTTPException(status_code=404, detail=f"Could not geocode origin: {origin}")
+    if user_location and job_lat is not None and job_lng is not None:
+        origin = user_location
+        origin_coords = await _geocode(origin)
+        if not origin_coords:
+            raise HTTPException(
+                status_code=400,
+                detail="Не удалось найти координаты вашего места проживания.",
+            )
+        try:
+            dest_coords = {
+                "lat": float(job_lat),
+                "lon": float(job_lng),
+                "display_name": "",
+            }
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Invalid job coordinates")
+    else:
+        origin = str(data.get("origin") or "").strip()
+        destination = str(data.get("destination") or "").strip()
 
-    dest_coords = await _geocode(destination)
-    if not dest_coords:
-        raise HTTPException(status_code=404, detail=f"Could not geocode destination: {destination}")
+        if not origin or not destination:
+            raise HTTPException(status_code=400, detail="origin and destination required")
+
+        origin_coords = await _geocode(origin)
+        if not origin_coords:
+            raise HTTPException(status_code=404, detail=f"Could not geocode origin: {origin}")
+
+        dest_coords = await _geocode(destination)
+        if not dest_coords:
+            raise HTTPException(status_code=404, detail=f"Could not geocode destination: {destination}")
 
     route = await _route_osrm(
         origin_coords["lat"], origin_coords["lon"],
@@ -316,8 +407,19 @@ async def calculate_route(data: dict):
     if not route:
         raise HTTPException(status_code=502, detail="Route calculation failed")
 
-    duration_min = round(route["duration_s"] / 60, 1)
-    distance_km = round(route["distance_m"] / 1000, 2)
+    distance_km = round(route["distance_m"] / 1000, 1)
+    steps = [
+        {
+            "text": _step_text(s["instruction"], s["type"], s["modifier"]),
+            "distance": s["distance_m"],
+            "instruction": s["instruction"],
+            "distance_m": s["distance_m"],
+            "duration_s": s["duration_s"],
+            "type": s["type"],
+            "modifier": s["modifier"],
+        }
+        for s in route["steps"]
+    ]
 
     return {
         "origin": {
@@ -330,13 +432,19 @@ async def calculate_route(data: dict):
             "query": destination,
             "lat": dest_coords["lat"],
             "lon": dest_coords["lon"],
-            "display_name": dest_coords["display_name"],
+            "display_name": dest_coords.get("display_name", ""),
         },
         "distance_km": distance_km,
-        "duration_min": duration_min,
+        "duration_min": round(route["duration_s"] / 60, 1),
         "distance_m": route["distance_m"],
         "duration_s": route["duration_s"],
-        "steps": route["steps"],
+        "distance_text": f"{distance_km} км",
+        "duration_text": _format_duration(route["duration_s"]),
+        "duration_minutes": round(route["duration_s"] / 60),
+        "user_address": origin_coords.get("display_name") or origin,
+        "user_coordinates": {"lat": origin_coords["lat"], "lng": origin_coords["lon"]},
+        "polyline": route["polyline"],
+        "steps": steps,
     }
 
 
@@ -348,6 +456,10 @@ FONT_PATHS = {
     "arial_bold": f"{FONT_DIR}/arialbd.ttf",
     "arial_italic": f"{FONT_DIR}/ariali.ttf",
     "arial_bold_italic": f"{FONT_DIR}/arialbi.ttf",
+    "times": f"{FONT_DIR}/times.ttf",
+    "times_bold": f"{FONT_DIR}/timesbd.ttf",
+    "times_italic": f"{FONT_DIR}/timesi.ttf",
+    "times_bold_italic": f"{FONT_DIR}/timesbi.ttf",
 }
 
 STYLE_COLORS = {
@@ -666,54 +778,13 @@ def _build_creative_job_pdf(buf, job, info_rows, description, primary, accent, t
     doc.build(elements)
 
 
-def _generate_resume_pdf(resume, student_profile=None, user=None, style: str = "modern") -> bytes:
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib import colors
-    from reportlab.lib.units import mm, cm
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.enums import TA_LEFT
-
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.5 * cm, bottomMargin=1.5 * cm,
-                            leftMargin=2 * cm, rightMargin=2 * cm)
-    scheme = STYLE_COLORS.get(style, STYLE_COLORS["modern"])
-    primary_rgb = _hex_to_rgb(scheme["primary"])
-    accent_rgb = _hex_to_rgb(scheme["accent"])
-
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle("ResumeTitle", parent=styles["Title"], fontSize=18,
-                                 textColor=colors.Color(primary_rgb[0] / 255, primary_rgb[1] / 255, primary_rgb[2] / 255),
-                                 spaceAfter=6)
-    heading_style = ParagraphStyle("ResumeHeading", parent=styles["Heading2"], fontSize=13,
-                                   textColor=colors.Color(accent_rgb[0] / 255, accent_rgb[1] / 255, accent_rgb[2] / 255),
-                                   spaceAfter=4)
-    body_style = ParagraphStyle("ResumeBody", parent=styles["BodyText"], fontSize=10, leading=14)
-
-    elements = []
-
+def _resume_pdf_data(resume, student_profile=None, user=None) -> dict:
     name = ""
     if user:
         name = f"{user.first_name} {user.last_name}".strip() or user.username
-    elif student_profile and student_profile.user:
+    elif student_profile and getattr(student_profile, "user", None):
         u = student_profile.user
         name = f"{u.first_name} {u.last_name}".strip() or u.username
-
-    header_data = [[Paragraph(f"<b>{name}</b>", title_style)]]
-    if resume.title:
-        header_data[0][0] = Paragraph(f"<b>{name}</b><br/><font size=10>{resume.title}</font>", title_style)
-
-    header_table = Table(header_data, colWidths=[doc.width])
-    header_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), colors.Color(primary_rgb[0] / 255, primary_rgb[1] / 255, primary_rgb[2] / 255)),
-        ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
-        ("LEFTPADDING", (0, 0), (-1, -1), 12),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 12),
-        ("TOPPADDING", (0, 0), (-1, -1), 12),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
-    ]))
-    elements.append(header_table)
-    elements.append(Spacer(1, 12))
 
     info_rows = []
     if user and user.email:
@@ -734,16 +805,78 @@ def _generate_resume_pdf(resume, student_profile=None, user=None, style: str = "
     if resume.work_format:
         info_rows.append(["Work Format", resume.work_format])
 
-    if info_rows:
-        info_data = [[Paragraph("<b>Personal Information</b>", heading_style), ""]]
-        for label, value in info_rows:
-            info_data.append([f"<b>{label}:</b>", str(value)])
+    skills = ""
+    if resume.skills:
+        skills = ", ".join(resume.skills) if isinstance(resume.skills, list) else str(resume.skills)
+
+    links = []
+    if resume.github_url:
+        links.append(("GitHub", resume.github_url))
+    if resume.portfolio_url:
+        links.append(("Portfolio", resume.portfolio_url))
+    if resume.linkedin_url:
+        links.append(("LinkedIn", resume.linkedin_url))
+
+    return {
+        "name": name,
+        "title": resume.title or "",
+        "info_rows": info_rows,
+        "skills": skills,
+        "links": links,
+        "about": (resume.about or "").replace("\n", "<br/>"),
+    }
+
+
+def _build_modern_resume_pdf(buf, data, scheme):
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.5 * cm, bottomMargin=1.5 * cm,
+                            leftMargin=2 * cm, rightMargin=2 * cm)
+    primary = colors.HexColor(scheme["primary"])
+    accent = colors.HexColor(scheme["accent"])
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle("ResumeTitle", parent=styles["Title"], fontName="arial_bold", fontSize=18,
+                                 textColor=colors.white, spaceAfter=6)
+    heading_style = ParagraphStyle("ResumeHeading", parent=styles["Heading2"], fontName="arial_bold", fontSize=13,
+                                   textColor=accent, spaceAfter=4)
+    table_head_style = ParagraphStyle("ResumeTableHead", parent=styles["Heading2"], fontName="arial_bold", fontSize=13,
+                                      textColor=colors.white, spaceAfter=0, spaceBefore=0)
+    body_style = ParagraphStyle("ResumeBody", parent=styles["BodyText"], fontName="arial", fontSize=10, leading=14)
+
+    elements = []
+    name = data["name"]
+    header_data = [[Paragraph(f"<b>{name}</b>", title_style)]]
+    if data["title"]:
+        header_data[0][0] = Paragraph(f"<b>{name}</b><br/><font size=10>{data['title']}</font>", title_style)
+
+    header_table = Table(header_data, colWidths=[doc.width])
+    header_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), primary),
+        ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
+        ("LEFTPADDING", (0, 0), (-1, -1), 12),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+        ("TOPPADDING", (0, 0), (-1, -1), 12),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
+    ]))
+    elements.append(header_table)
+    elements.append(Spacer(1, 12))
+
+    if data["info_rows"]:
+        info_data = [[Paragraph("Personal Information", table_head_style), ""]]
+        for label, value in data["info_rows"]:
+            info_data.append([f"{label}:", str(value)])
 
         info_table = Table(info_data, colWidths=[4 * cm, doc.width - 4 * cm])
         info_table.setStyle(TableStyle([
             ("SPAN", (0, 0), (-1, 0)),
-            ("BACKGROUND", (0, 0), (-1, 0), colors.Color(accent_rgb[0] / 255, accent_rgb[1] / 255, accent_rgb[2] / 255)),
+            ("BACKGROUND", (0, 0), (-1, 0), accent),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 1), (0, -1), "arial_bold"),
             ("FONTSIZE", (0, 0), (-1, -1), 10),
             ("LEFTPADDING", (0, 0), (-1, -1), 8),
             ("RIGHTPADDING", (0, 0), (-1, -1), 8),
@@ -755,30 +888,261 @@ def _generate_resume_pdf(resume, student_profile=None, user=None, style: str = "
         elements.append(info_table)
         elements.append(Spacer(1, 12))
 
-    if resume.skills:
+    if data["skills"]:
         elements.append(Paragraph("<b>Skills</b>", heading_style))
-        skills_text = ", ".join(resume.skills) if isinstance(resume.skills, list) else str(resume.skills)
-        elements.append(Paragraph(skills_text, body_style))
+        elements.append(Paragraph(data["skills"], body_style))
         elements.append(Spacer(1, 8))
 
-    links = []
-    if resume.github_url:
-        links.append(("GitHub", resume.github_url))
-    if resume.portfolio_url:
-        links.append(("Portfolio", resume.portfolio_url))
-    if resume.linkedin_url:
-        links.append(("LinkedIn", resume.linkedin_url))
-    if links:
+    if data["links"]:
         elements.append(Paragraph("<b>Links</b>", heading_style))
-        for label, url in links:
+        for label, url in data["links"]:
             elements.append(Paragraph(f"<b>{label}:</b> {url}", body_style))
         elements.append(Spacer(1, 8))
 
-    if resume.about:
+    if data["about"]:
         elements.append(Paragraph("<b>About</b>", heading_style))
-        elements.append(Paragraph(resume.about.replace("\n", "<br/>"), body_style))
+        elements.append(Paragraph(data["about"], body_style))
 
     doc.build(elements)
+
+
+def _build_classic_resume_pdf(buf, data, scheme):
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=2 * cm, bottomMargin=2 * cm,
+                            leftMargin=2.2 * cm, rightMargin=2.2 * cm)
+    primary = colors.HexColor(scheme["primary"])
+    accent = colors.HexColor(scheme["accent"])
+    text_color = colors.HexColor(scheme["text"])
+
+    styles = getSampleStyleSheet()
+    name_style = ParagraphStyle("ClsName", parent=styles["Title"], fontName="times_bold", fontSize=22,
+                                textColor=primary, alignment=1, spaceAfter=2)
+    sub_style = ParagraphStyle("ClsSub", parent=styles["Normal"], fontName="times_italic", fontSize=11,
+                               textColor=accent, alignment=1, spaceAfter=10)
+    heading_style = ParagraphStyle("ClsHeading", parent=styles["Heading2"], fontName="times_bold", fontSize=12,
+                                   textColor=primary, spaceBefore=14, spaceAfter=6)
+    table_head_style = ParagraphStyle("ClsTableHead", parent=styles["Heading2"], fontName="times_bold", fontSize=12,
+                                      textColor=colors.white, spaceBefore=0, spaceAfter=0)
+    body_style = ParagraphStyle("ClsBody", parent=styles["BodyText"], fontName="times", fontSize=11,
+                                leading=15, textColor=text_color)
+
+    elements = []
+    elements.append(Paragraph(data["name"] or " ", name_style))
+    if data["title"]:
+        elements.append(Paragraph(data["title"], sub_style))
+    elements.append(HRFlowable(width="100%", thickness=1.5, color=primary, spaceAfter=10))
+
+    if data["info_rows"]:
+        rows = [[Paragraph("Personal Information", table_head_style), ""]]
+        for label, value in data["info_rows"]:
+            rows.append([str(label), str(value)])
+        table = Table(rows, colWidths=[4.5 * cm, doc.width - 4.5 * cm])
+        table.setStyle(TableStyle([
+            ("SPAN", (0, 0), (-1, 0)),
+            ("BACKGROUND", (0, 0), (-1, 0), primary),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 1), (0, -1), "times_bold"),
+            ("FONTNAME", (1, 1), (1, -1), "times"),
+            ("FONTSIZE", (0, 0), (-1, -1), 10),
+            ("GRID", (0, 0), (-1, -1), 0.8, primary),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F3F4F6")]),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]))
+        elements.append(table)
+
+    if data["skills"]:
+        elements.append(Paragraph("Skills", heading_style))
+        elements.append(Paragraph(data["skills"], body_style))
+
+    if data["links"]:
+        elements.append(Paragraph("Links", heading_style))
+        for label, url in data["links"]:
+            elements.append(Paragraph(f"<b>{label}:</b> {url}", body_style))
+
+    if data["about"]:
+        elements.append(Paragraph("About", heading_style))
+        elements.append(Paragraph(data["about"], body_style))
+
+    doc.build(elements)
+
+
+def _build_minimal_resume_pdf(buf, data, scheme):
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, HRFlowable
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=2.2 * cm, bottomMargin=2 * cm,
+                            leftMargin=2.5 * cm, rightMargin=2.5 * cm)
+    primary = colors.HexColor(scheme["primary"])
+    accent = colors.HexColor(scheme["accent"])
+    text_color = colors.HexColor(scheme["text"])
+
+    styles = getSampleStyleSheet()
+    name_style = ParagraphStyle("MinName", parent=styles["Normal"], fontName="arial_bold", fontSize=16,
+                                textColor=primary, leading=20, spaceAfter=2)
+    sub_style = ParagraphStyle("MinSub", parent=styles["Normal"], fontName="arial", fontSize=10.5,
+                               textColor=accent, leading=14, spaceAfter=6)
+    heading_style = ParagraphStyle("MinHeading", parent=styles["Normal"], fontName="arial_bold", fontSize=9,
+                                   textColor=accent, leading=12, spaceBefore=14, spaceAfter=6)
+    body_style = ParagraphStyle("MinBody", parent=styles["BodyText"], fontName="arial", fontSize=9.5,
+                                leading=13.5, textColor=text_color)
+    label_style = ParagraphStyle("MinLabel", parent=styles["Normal"], fontName="arial", fontSize=9,
+                                 textColor=colors.HexColor("#6B7280"), leading=12)
+    value_style = ParagraphStyle("MinValue", parent=styles["Normal"], fontName="arial", fontSize=9.5,
+                                 textColor=text_color, leading=12)
+
+    elements = []
+    elements.append(Paragraph(data["name"] or " ", name_style))
+    if data["title"]:
+        elements.append(Paragraph(data["title"], sub_style))
+    elements.append(HRFlowable(width="100%", thickness=0.6, color=colors.HexColor("#D1D5DB"),
+                               spaceBefore=4, spaceAfter=8))
+
+    if data["info_rows"]:
+        rows = []
+        for label, value in data["info_rows"]:
+            rows.append([Paragraph(label.upper(), label_style), Paragraph(str(value), value_style)])
+        table = Table(rows, colWidths=[4 * cm, doc.width - 4 * cm])
+        table.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("LINEBELOW", (0, 0), (-1, -1), 0.3, colors.HexColor("#E5E7EB")),
+        ]))
+        elements.append(table)
+
+    if data["skills"]:
+        elements.append(Paragraph("SKILLS", heading_style))
+        elements.append(Paragraph(data["skills"], body_style))
+
+    if data["links"]:
+        elements.append(Paragraph("LINKS", heading_style))
+        for label, url in data["links"]:
+            elements.append(Paragraph(f"<b>{label}:</b> {url}", body_style))
+
+    if data["about"]:
+        elements.append(Paragraph("ABOUT", heading_style))
+        elements.append(Paragraph(data["about"], body_style))
+
+    doc.build(elements)
+
+
+def _build_creative_resume_pdf(buf, data, scheme):
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER
+
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.2 * cm, bottomMargin=1.5 * cm,
+                            leftMargin=0, rightMargin=0)
+    primary = colors.HexColor(scheme["primary"])
+    accent = colors.HexColor(scheme["accent"])
+    text_color = colors.HexColor(scheme["text"])
+
+    styles = getSampleStyleSheet()
+    hero_name_style = ParagraphStyle("CrName", parent=styles["Title"], fontName="arial_bold", fontSize=22,
+                                     textColor=colors.white, alignment=TA_CENTER, leading=26, spaceAfter=4)
+    hero_sub_style = ParagraphStyle("CrSub", parent=styles["Normal"], fontName="arial", fontSize=11,
+                                    textColor=colors.white, alignment=TA_CENTER)
+    heading_style = ParagraphStyle("CrHeading", parent=styles["Heading2"], fontName="arial_bold", fontSize=13,
+                                   textColor=primary, spaceBefore=12, spaceAfter=6)
+    body_style = ParagraphStyle("CrBody", parent=styles["BodyText"], fontName="arial", fontSize=10, leading=14,
+                                textColor=text_color)
+
+    inner = 1.2 * cm
+
+    def wrap(flowables):
+        block = Table([[flowables]], colWidths=[doc.width])
+        block.setStyle(TableStyle([
+            ("LEFTPADDING", (0, 0), (-1, -1), inner),
+            ("RIGHTPADDING", (0, 0), (-1, -1), inner),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]))
+        return block
+
+    elements = []
+    hero_rows = [[Paragraph(f"<b>{data['name']}</b>", hero_name_style)]]
+    if data["title"]:
+        hero_rows.append([Paragraph(data["title"], hero_sub_style)])
+    hero = Table(hero_rows, colWidths=[doc.width])
+    hero.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), primary),
+        ("TOPPADDING", (0, 0), (-1, 0), 18),
+        ("BOTTOMPADDING", (0, -1), (-1, -1), 18),
+        ("LEFTPADDING", (0, 0), (-1, -1), 20),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 20),
+    ]))
+    elements.append(hero)
+
+    if data["info_rows"]:
+        rows = []
+        for label, value in data["info_rows"]:
+            rows.append([
+                Paragraph(f"<font color='{primary.hexval()}'><b>{label}</b></font>", body_style),
+                Paragraph(str(value), body_style),
+            ])
+        table = Table(rows, colWidths=[4 * cm, doc.width - 4 * cm - 2 * inner])
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#FFF7ED")),
+            ("BOX", (0, 0), (-1, -1), 1, accent),
+            ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#FDE68A")),
+            ("TOPPADDING", (0, 0), (-1, -1), 7),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]))
+        elements.append(wrap([table]))
+
+    if data["skills"]:
+        elements.append(wrap([
+            Paragraph(f"<font color='{accent.hexval()}'><b>SKILLS</b></font>", heading_style),
+            Paragraph(data["skills"], body_style),
+        ]))
+
+    if data["links"]:
+        link_blocks = [Paragraph(f"<font color='{accent.hexval()}'><b>LINKS</b></font>", heading_style)]
+        for label, url in data["links"]:
+            link_blocks.append(Paragraph(f"<b>{label}:</b> {url}", body_style))
+        elements.append(wrap(link_blocks))
+
+    if data["about"]:
+        elements.append(wrap([
+            Paragraph(f"<font color='{accent.hexval()}'><b>ABOUT</b></font>", heading_style),
+            Paragraph(data["about"], body_style),
+        ]))
+
+    doc.build(elements)
+
+
+RESUME_PDF_BUILDERS = {
+    "classic": _build_classic_resume_pdf,
+    "minimal": _build_minimal_resume_pdf,
+    "creative": _build_creative_resume_pdf,
+}
+
+
+def _generate_resume_pdf(resume, student_profile=None, user=None, style: str = "modern") -> bytes:
+    data = _resume_pdf_data(resume, student_profile, user)
+    scheme = STYLE_COLORS.get(style, STYLE_COLORS["modern"])
+    builder = RESUME_PDF_BUILDERS.get(style, _build_modern_resume_pdf)
+
+    buf = io.BytesIO()
+    builder(buf, data, scheme)
     buf.seek(0)
     return buf.getvalue()
 
@@ -853,7 +1217,7 @@ async def get_resume_pdf(
 @extras_router.post("/parsing/somon-tj/")
 async def trigger_somon_parsing(
     max_jobs: int = Query(30, ge=1, le=200),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if user.role not in ("employer", "staff") and not user.is_staff:

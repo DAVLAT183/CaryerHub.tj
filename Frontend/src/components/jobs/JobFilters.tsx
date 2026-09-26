@@ -113,15 +113,18 @@ export default function JobFilters({ filters, onChange }: JobFiltersProps) {
           <Chip active={!filters.category} onClick={() => update({ category: '' })}>
             {t('jobs.all')}
           </Chip>
-          {visibleCategories.map((cat) => (
-            <Chip
-              key={cat.id}
-              active={filters.category === String(cat.id)}
-              onClick={() => update({ category: String(cat.id) })}
-            >
-              {cat.name}
-            </Chip>
-          ))}
+          {visibleCategories.map((cat) => {
+            const value = String(cat.id);
+            return (
+              <Chip
+                key={cat.id}
+                active={filters.category === value}
+                onClick={() => update({ category: filters.category === value ? '' : value })}
+              >
+                {cat.name}
+              </Chip>
+            );
+          })}
         </div>
         {hasMore && (
           <button

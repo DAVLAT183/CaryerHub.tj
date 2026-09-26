@@ -138,6 +138,10 @@
     "website": "Веб-сайт",
     "address": "Адрес",
     "avatar": "Аватар",
+    "changePhoto": "Изменить фото",
+    "removePhoto": "Удалить фото",
+    "photoUpdated": "Фото профиля обновлено",
+    "photoRemoved": "Фото профиля удалено",
     "saveChanges": "Сохранить изменения",
     "profileUpdated": "Профиль обновлен",
     "profileError": "Ошибка обновления профиля",
@@ -163,7 +167,18 @@
     "editResume": "Редактировать резюме",
     "newResume": "Новое резюме",
     "profileCompletion": "Заполненность профиля",
-    "companyNotSpecified": "Компания не указана"
+    "companyNotSpecified": "Компания не указана",
+    "profileSaved": "Профиль сохранён",
+    "confirmDeleteResume": "Удалить резюме?",
+    "resumeDeleted": "Резюме удалено",
+    "resumeGenerated": "Резюме сгенерировано!",
+    "fillProfileProgress": "Заполните все данные чтобы работодатели могли вас найти. Заполнено {completed} из {total}.",
+    "courseN": "{n} курс",
+    "createWithAI": "Создать с ИИ (чат)",
+    "portfolio": "Портфолио",
+    "downloadPDF": "Скачать PDF",
+    "aiResumeTitle": "ИИ сгенерировал резюме",
+    "editAndSave": "Отредактировать и сохранить"
   },
   "jobs": {
     "title": "Вакансии",
@@ -226,7 +241,33 @@
     "extra": "Дополнительно",
     "noExpOnly": "Только без опыта",
     "details": "Подробнее",
-    "onMap": "На карте"
+    "onMap": "На карте",
+    "routeTitle": "Маршрут до места работы",
+    "buildRoute": "Построить маршрут",
+    "routeIntro": "Постройте маршрут от вашего места проживания ({location}) до места работы",
+    "routeLabel": "Маршрут",
+    "routeErrorDefault": "Не удалось построить маршрут",
+    "analyzingRoute": "Анализируем маршрут...",
+    "distance": "Расстояние",
+    "travelTime": "Время в пути",
+    "fromWhere": "Откуда",
+    "you": "Вы",
+    "meters": "{n} м",
+    "hideRoute": "Скрыть маршрут",
+    "minAgeYears": "Минимальный возраст: {n}",
+    "noExpRequired": "Опыт не требуется",
+    "descriptionTitle": "Описание",
+    "locationOnMap": "Расположение на карте",
+    "openInMaps": "Открыть в картах",
+    "specifyLocation": "Укажите место проживания",
+    "specifyLocationDesc": "Чтобы построить маршрут, укажите ваш город",
+    "inSettings": "в настройках",
+    "jobNotFound": "Вакансия не найдена",
+    "backToAll": "← Ко всем вакансиям",
+    "applySent": "Заявка отправлена!",
+    "applyOnSite": "Откликнуться на сайте",
+    "applyLocal": "Откликнуться в CareerHub",
+    "pdfDownloaded": "PDF скачан"
   },
   "categories": {
     "programming": "Программирование",
@@ -285,7 +326,11 @@
     "generatedByAI": "Сгенерировано ИИ",
     "skillsPlaceholder": "Навыки через запятую",
     "aboutPlaceholder": "Расскажите о себе, опыте, достижениях...",
-    "titlePlaceholder": "Например: Junior Python Developer"
+    "titlePlaceholder": "Например: Junior Python Developer",
+    "updated": "Обновлено",
+    "skillsComma": "Навыки (через запятую)",
+    "styleLabel": "Стиль резюме",
+    "optionalLinks": "Необязательные ссылки"
   },
   "resumeStyles": {
     "classic": "Классический",
@@ -331,6 +376,7 @@
     "emptyStudent": "Откликнитесь на вакансию, чтобы она появилась здесь",
     "emptyEmployer": "Пока никто не откликнулся на ваши вакансии",
     "statusUpdated": "Статус обновлён",
+    "newApplication": "Новый отклик на вакансию!",
     "from": "От: {name}",
     "status": {
       "sent": "Отправлено",
@@ -356,6 +402,7 @@
     "minAge": "Мин. возраст",
     "experienceRequired": "Требуется опыт",
     "isActive": "Активна",
+    "verified": "Проверена",
     "jobCreated": "Вакансия создана",
     "jobUpdated": "Вакансия обновлена",
     "jobDeleted": "Вакансия удалена"
@@ -459,7 +506,13 @@
     "twoFactorDesc": "Дополнительная защита аккаунта",
     "soon": "Настроить (скоро)",
     "deleteAccount": "Удалить аккаунт",
-    "deleteAccountDesc": "Необратимое удаление всех данных"
+    "deleteAccountDesc": "Необратимое удаление всех данных",
+    "profileSaved": "Профиль сохранён",
+    "notifSaved": "Настройки уведомлений сохранены",
+    "fillAllPwdFields": "Заполните все поля пароля",
+    "pwdMin8": "Новый пароль должен быть не короче 8 символов",
+    "pwdChanged": "Пароль успешно изменён",
+    "dataExported": "Данные экспортированы"
   },
   "notifications": {
     "jobCreated": "Вакансия успешно создана",
@@ -501,8 +554,8 @@
   },
   "salary": {
     "notSpecified": "Зарплата не указана",
-    "from": "от {n} ₽",
-    "to": "до {n} ₽"
+    "from": "от {n} см",
+    "to": "до {n} см"
   },
   "errors": {
     "unauthorized": "Необходима авторизация",

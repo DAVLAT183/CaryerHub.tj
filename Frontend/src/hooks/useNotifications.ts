@@ -52,18 +52,28 @@ export function useNotifications(enabled = true): UseNotificationsReturn {
     if (enabled) fetchNotifications();
   }, [enabled, fetchNotifications]);
 
-  const handleWsMessage = useCallback((data: Record<string, unknown>) => {
-    if (data.type === 'send_notification' || data.notification_type) {
+  const handleWsMessage = useCallback((msg: Record<string, unknown>) => {
+    if (msg.type === 'application_new') return;
+
+    let payload: Record<string, unknown> = msg;
+    if (msg.type === 'notification' && msg.data && typeof msg.data === 'object') {
+      payload = msg.data as Record<string, unknown>;
+    }
+
+    if (msg.type === 'send_notification' || msg.type === 'notification' || payload.notification_type) {
       const newNotif: Notification = {
-        id: Date.now(),
-        notification_type: (data.notification_type as string) || 'info',
-        title: (data.title as string) || '',
-        message: (data.message as string) || '',
-        link: (data.data as Record<string, string>)?.link || null,
+        id: typeof payload.id === 'number' ? payload.id : Date.now(),
+        notification_type: (payload.notification_type as string) || 'info',
+        title: (payload.title as string) || '',
+        message: (payload.message as string) || '',
+        link: (payload.link as string) || null,
         is_read: false,
-        created_at: new Date().toISOString(),
+        created_at: (payload.created_at as string) || new Date().toISOString(),
       };
-      setNotifications((prev) => [newNotif, ...prev]);
+      setNotifications((prev) => {
+        if (prev.some((n) => n.id === newNotif.id)) return prev;
+        return [newNotif, ...prev];
+      });
       setUnreadCount((prev) => prev + 1);
     }
   }, []);

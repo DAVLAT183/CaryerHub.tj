@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
@@ -176,10 +176,9 @@ class ResumeSchema(BaseModel):
 class ResumeCreateSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
     title: str
     about: Optional[str] = None
-    skills: Optional[str] = None
+    skills: Optional[Union[str, list[str]]] = None
     schedule_type: Optional[str] = None
     work_format: Optional[str] = None
     github_url: Optional[str] = None

@@ -126,7 +126,7 @@ export default function SettingsPage() {
         const res = await api.get(`/student-profiles/${profile.id}/`);
         setProfile(res.data);
       }
-      showToast('Профиль сохранён', 'success');
+      showToast(t('settings.profileSaved'), 'success');
     } catch (err) {
       showToast(getErrorMessage(err), 'error');
     } finally {
@@ -138,7 +138,7 @@ export default function SettingsPage() {
     setNotifSaving(true);
     try {
       await api.put('/notification-settings/', notifications);
-      showToast('Настройки уведомлений сохранены', 'success');
+      showToast(t('settings.notifSaved'), 'success');
     } catch (err) {
       showToast(getErrorMessage(err), 'error');
     } finally {
@@ -148,15 +148,15 @@ export default function SettingsPage() {
 
   const changePassword = async () => {
     if (!pwdForm.current_password || !pwdForm.new_password) {
-      showToast('Заполните все поля пароля', 'error');
+      showToast(t('settings.fillAllPwdFields'), 'error');
       return;
     }
     if (pwdForm.new_password.length < 8) {
-      showToast('Новый пароль должен быть не короче 8 символов', 'error');
+      showToast(t('settings.pwdMin8'), 'error');
       return;
     }
     if (pwdForm.new_password !== pwdForm.confirm_password) {
-      showToast('Пароли не совпадают', 'error');
+      showToast(t('auth.passwordMismatch'), 'error');
       return;
     }
     setPwdSaving(true);
@@ -166,7 +166,7 @@ export default function SettingsPage() {
         new_password: pwdForm.new_password,
       });
       setPwdForm({ current_password: '', new_password: '', confirm_password: '' });
-      showToast('Пароль успешно изменён', 'success');
+      showToast(t('settings.pwdChanged'), 'success');
     } catch (err) {
       showToast(getErrorMessage(err), 'error');
     } finally {
@@ -187,7 +187,7 @@ export default function SettingsPage() {
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-      showToast('Данные экспортированы', 'success');
+      showToast(t('settings.dataExported'), 'success');
     } catch (err) {
       showToast(getErrorMessage(err), 'error');
     } finally {

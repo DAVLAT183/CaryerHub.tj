@@ -459,17 +459,19 @@ RESUME_CHAT_SYSTEM_PROMPT = """Ты — карьерный консультан�
 
 Твоя задача: задавать пользователю вопросы по очереди, чтобы собрать информацию для резюме.
 
-ПРАВИЛА:
-1. Задавай ПО ОДНОМУ вопросу за раз. Не перегружай пользователя.
-2. Сначала спроси: "На какую должность вы претендуете?"
-3. Потом спроси: "Какие у вас навыки? (технологии, инструменты, языки программирования)"
-4. Потом: "Расскажите о вашем опыте — были ли стажировки, проекты, хакатоны?"
-5. Потом: "Какой график вам подходит? (гибкий, 2-4 часа, полная занятость)"
-6. Потом: "Какой формат работы предпочитаете? (онлайн, офлайн, гибрид)"
-7. Собрав достаточно информации — предоставь итоговый JSON.
+ПОРЯДОК ВОПРОСОВ (по одному за раз):
+1. "На какую должность вы претендуете?"
+2. "Какие у вас навыки? (технологии, инструменты, языки программирования)"
+3. "Расскажите о вашем опыте — были ли стажировки, проекты, хакатоны?"
+4. "Какой график вам подходит? (гибкий, 2-4 часа, полная занятость)"
+5. "Какой формат работы предпочитаете? (онлайн, офлайн, гибрид)"
 
-Формат итогового ответа (когда достаточно данных):
-Сгенерируй резюме в формате JSON:
+ЖЁСТКИЕ ПРАВИЛА:
+- Пока не получен ответ на ВСЕ 5 вопросов выше — отвечай ТОЛЬКО обычным текстом со следующим вопросом. НЕ включай JSON, блоки кода и не пиши, что резюме готово.
+- Ответ — это либо ОДИН вопрос, либо финальный результат. Никогда не смешивай вопрос и JSON в одном сообщении.
+- Не выдумывай навыки и опыт за пользователя — жди его ответов.
+- Когда все данные собраны, ответь сначала коротким текстом ("Резюме готово! Нажмите кнопку 'Сохранить'.") и затем СТРОГО блоком:
+```resume
 {
   "title": "желаемая должность",
   "about": "текст 'О себе' (3-5 предложений)",
@@ -477,12 +479,13 @@ RESUME_CHAT_SYSTEM_PROMPT = """Ты — карьерный консультан�
   "schedule_type": "flexible" или "part_time" или "full_time",
   "work_format": "online" или "offline" или "hybrid"
 }
+```
+- После блока ```resume не задавай никаких вопросов — диалог завершён.
 
 НОСИТЕЛЬЯ ДАННЫХ СТУДЕНТА (уже известны, НЕ спрашивай):
 - Университет, факультет, курс, город, имя
 
-Стиль общения: дружелюбный, профессиональный. Отвечай на языке пользователя.
-После получения JSON — скажи "Резюме готово! Нажмите кнопку 'Сохранить'." """
+Стиль общения: дружелюбный, профессиональный. Отвечай на языке пользователя."""
 
 
 @api_view(['POST'])
@@ -517,20 +520,45 @@ def ai_resume_chat(request):
     resume_data = None
     try:
         text = ai_response.strip()
-        if '```json' in text:
-            text = text.split('```json', 1)[1].rsplit('```', 1)[0].strip()
-        elif '```' in text:
-            text = text.split('```', 1)[1].rsplit('```', 1)[0].strip()
-        json_start = text.find('{')
-        json_end = text.rfind('}')
-        if json_start != -1 and json_end != -1:
-            text = text[json_start:json_end + 1]
-            resume_data = _json.loads(text)
+        block = None
+        if '```resume' in text:
+            block = text.split('```resume', 1)[1].rsplit('```', 1)[0].strip()
+        else:
+            candidate = text
+            if '```json' in candidate:
+                candidate = candidate.split('```json', 1)[1].rsplit('```', 1)[0].strip()
+            elif '```' in candidate:
+                candidate = candidate.split('```', 1)[1].rsplit('```', 1)[0].strip()
+            if candidate.startswith('{') and candidate.endswith('}'):
+                block = candidate
+        if block:
+            data = _json.loads(block)
+            if (
+                isinstance(data, dict)
+                and str(data.get('title') or '').strip()
+                and isinstance(data.get('skills'), list)
+                and data.get('skills')
+                and data.get('schedule_type')
+                and data.get('work_format')
+            ):
+                resume_data = data
     except Exception:
-        pass
+        resume_data = None
+
+    message = ai_response
+    if resume_data is not None:
+        cleaned = message
+        if '```resume' in cleaned:
+            start = cleaned.find('```resume')
+            after = cleaned[start + len('```resume'):]
+            close = after.find('```')
+            cleaned = (cleaned[:start] + (after[close + 3:] if close != -1 else '')).strip()
+        elif cleaned.startswith('{') and cleaned.endswith('}'):
+            cleaned = ''
+        message = cleaned or 'Резюме готово! Нажмите кнопку "Сохранить".'
 
     return Response({
-        'message': ai_response,
+        'message': message,
         'resume_data': resume_data,
     })
 

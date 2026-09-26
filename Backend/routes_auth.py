@@ -1,24 +1,29 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import httpx
 
 from database import get_db
-from models import User, StudentProfile, EmployerProfile
+from models import User, StudentProfile, EmployerProfile, EmailVerification
 from schemas import RegisterRequest, LoginRequest, TokenResponse, RefreshRequest, UserResponse
 from auth import (
     hash_password, verify_password,
     create_access_token, create_refresh_token,
-    decode_token, get_current_user,
+    decode_token, get_current_user, generate_verification_code,
 )
 from config import settings
+from email_service import send_verification_email
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
 @router.post("/register/", response_model=TokenResponse)
-async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
+async def register(
+    data: RegisterRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
     result = await db.execute(select(User).where((User.username == data.username) | (User.email == data.email)))
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Username or email already exists")
@@ -43,6 +48,16 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
     await db.commit()
     await db.refresh(user)
+
+    code = generate_verification_code()
+    db.add(EmailVerification(user_id=user.id, token=code))
+    await db.commit()
+    background_tasks.add_task(
+        send_verification_email,
+        user.email,
+        user.first_name or user.username,
+        code,
+    )
 
     access = create_access_token({"sub": str(user.id)})
     refresh = create_refresh_token({"sub": str(user.id)})
@@ -151,11 +166,12 @@ async def google_auth_callback(code: str = None, error: str = None, db: AsyncSes
     user = result.scalar_one_or_none()
 
     if user:
-        if avatar_url and not user.avatar:
+        if avatar_url and (not user.avatar or "googleusercontent" in user.avatar):
             user.avatar = avatar_url
         if name and not user.first_name:
             user.first_name = name.split(" ")[0]
             user.last_name = " ".join(name.split(" ")[1:]) if " " in name else ""
+        user.is_email_verified = True
         await db.commit()
         await db.refresh(user)
     else:

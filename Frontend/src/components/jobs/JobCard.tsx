@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { MapPin, Clock, Sparkles, Map, CheckCircle2 } from 'lucide-react';
 import { clsx } from '@/lib/utils';
 import type { Job } from '@/types';
-import { formatSalary, formatSchedule, formatWorkFormat, formatDate, mediaUrl } from '@/lib/utils';
+import { formatSalary, formatSchedule, formatWorkFormat, formatDate, mediaUrl, getJobSource } from '@/lib/utils';
 import { useI18n } from '@/i18n/I18nContext';
 
 interface JobCardProps {
@@ -15,6 +15,7 @@ interface JobCardProps {
 export default function JobCard({ job, isFavorited, isApplied, onToggleFavorite }: JobCardProps) {
   const { t } = useI18n();
   const isNew = job.created_at && new Date(job.created_at) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const sourceInfo = getJobSource(job.source);
 
   return (
     <Link href={`/jobs/${job.id}`} className="block group h-full">
@@ -49,9 +50,9 @@ export default function JobCard({ job, isFavorited, isApplied, onToggleFavorite 
                       </span>
                     )}
                     {isNew && <span className="new-badge">{t('jobs.new')}</span>}
-                    {job.source === 'somon_tj' && (
+                    {sourceInfo && (
                       <span className="text-[10px] font-semibold text-accent-primary bg-accent-primary/10 px-1.5 py-0.5 rounded">
-                        somon.tj
+                        {sourceInfo.name}
                       </span>
                     )}
                   </div>

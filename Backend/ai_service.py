@@ -101,22 +101,32 @@ CATEGORY_KEYWORDS = {
 
 RESUME_CHAT_SYSTEM_PROMPT = """You are an AI resume builder assistant for students. Your goal is to help students create professional resumes.
 
+Ask the student one question at a time:
+1. What position are you applying for?
+2. What are your skills (technologies, tools, languages)?
+3. What is your experience (internships, projects, hackathons)?
+4. What schedule suits you (flexible, 2-4 hours, full-time)?
+5. What work format do you prefer (online, offline, hybrid)?
+
 When responding, you MUST return valid JSON in this exact format:
 {
     "message": "Your conversational response to the student",
-    "resume_data": {
-        "title": "Resume title based on student's field",
-        "about": "Professional summary paragraph",
-        "skills": ["skill1", "skill2", "skill3"],
-        "schedule_type": "full-time or part-time or flexible",
-        "work_format": "online or offline or hybrid"
-    }
+    "ready": false,
+    "resume_data": null
 }
 
 Rules:
-- Always include resume_data in every response
-- Update resume_data progressively as the student provides more information
-- If the student hasn't given enough info yet, provide reasonable defaults based on what they've shared
+- Until you have answers to ALL five questions above, always respond with "ready": false, "resume_data": null and ask the NEXT question only (one question per message).
+- Never include resume data or say the resume is ready before all questions are answered. Do not invent skills or experience for the student.
+- Only when all five answers are collected, set "ready": true and fill resume_data:
+{
+    "title": "Resume title based on student's field",
+    "about": "Professional summary paragraph",
+    "skills": ["skill1", "skill2", "skill3"],
+    "schedule_type": "full-time or part-time or flexible",
+    "work_format": "online or offline or hybrid"
+}
+- When ready is true, "message" should be short: the resume is ready, ask the student to save it. Ask no new questions.
 - Keep the about section professional and concise (2-3 sentences)
 - Suggest 5-8 relevant skills based on the student's field
 - Be friendly and encouraging in your messages
@@ -249,6 +259,7 @@ async def _chat_with_gemini(
         if system_prompt == RESUME_CHAT_SYSTEM_PROMPT:
             return json.dumps({
                 "message": "AI is currently unavailable. Please try again later or create your resume manually.",
+                "ready": False,
                 "resume_data": None,
             })
         return (
@@ -275,6 +286,7 @@ async def _chat_with_gemini(
         if system_prompt == RESUME_CHAT_SYSTEM_PROMPT:
             return json.dumps({
                 "message": "Sorry, an error occurred. Please try again.",
+                "ready": False,
                 "resume_data": None,
             })
         return "Произошла ошибка при обращении к ИИ. Попробуйте ещё раз."

@@ -6,7 +6,7 @@ import api from '@/lib/api';
 import JobGrid from '@/components/jobs/JobGrid';
 import Skeleton from '@/components/ui/Skeleton';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
-import { showToast, getErrorMessage } from '@/lib/utils';
+import { showToast, getErrorMessage, getApplicationJobId } from '@/lib/utils';
 import { useI18n } from '@/i18n/I18nContext';
 import type { Job } from '@/types';
 
@@ -30,7 +30,11 @@ export default function FavoritesPage() {
     api.get('/applications/').then((res) => {
       const data = res.data;
       const list = data.results || data;
-      setAppliedJobs(list.map((a: { job: number }) => a.job));
+      setAppliedJobs(
+        list
+          .map((a: { job: unknown }) => getApplicationJobId(a.job))
+          .filter((id: number | null): id is number => id !== null)
+      );
     }).catch(() => {});
   }, []);
 
