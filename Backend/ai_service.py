@@ -16,7 +16,19 @@ from sqlalchemy import select
 
 from models import StudentProfile, Resume, Job
 
+try:
+    from config import settings as _settings
+except Exception:  # pragma: no cover
+    _settings = None
+
 logger = logging.getLogger("careerhub.ai")
+
+
+def _get_api_key() -> str:
+    key = os.environ.get("GEMINI_API_KEY", "")
+    if not key and _settings is not None:
+        key = getattr(_settings, "GEMINI_API_KEY", "") or ""
+    return key.strip()
 
 SKILL_SUGGESTIONS = {
     "programming": [
@@ -89,27 +101,59 @@ CATEGORY_KEYWORDS = {
 
 RESUME_CHAT_SYSTEM_PROMPT = """You are an AI resume builder assistant for students. Your goal is to help students create professional resumes.
 
+Ask the student one question at a time:
+1. What position are you applying for?
+2. What are your skills (technologies, tools, languages)?
+3. What is your experience (internships, projects, hackathons)?
+4. What schedule suits you (flexible, 2-4 hours, full-time)?
+5. What work format do you prefer (online, offline, hybrid)?
+
 When responding, you MUST return valid JSON in this exact format:
 {
     "message": "Your conversational response to the student",
-    "resume_data": {
-        "title": "Resume title based on student's field",
-        "about": "Professional summary paragraph",
-        "skills": ["skill1", "skill2", "skill3"],
-        "schedule_type": "full-time or part-time or flexible",
-        "work_format": "online or offline or hybrid"
-    }
+    "ready": false,
+    "resume_data": null
 }
 
 Rules:
-- Always include resume_data in every response
-- Update resume_data progressively as the student provides more information
-- If the student hasn't given enough info yet, provide reasonable defaults based on what they've shared
+- Until you have answers to ALL five questions above, always respond with "ready": false, "resume_data": null and ask the NEXT question only (one question per message).
+- Never include resume data or say the resume is ready before all questions are answered. Do not invent skills or experience for the student.
+- Only when all five answers are collected, set "ready": true and fill resume_data:
+{
+    "title": "Resume title based on student's field",
+    "about": "Professional summary paragraph",
+    "skills": ["skill1", "skill2", "skill3"],
+    "schedule_type": "full-time or part-time or flexible",
+    "work_format": "online or offline or hybrid"
+}
+- When ready is true, "message" should be short: the resume is ready, ask the student to save it. Ask no new questions.
 - Keep the about section professional and concise (2-3 sentences)
 - Suggest 5-8 relevant skills based on the student's field
 - Be friendly and encouraging in your messages
 - Respond in the same language the student uses
 """
+
+CAREER_CHAT_SYSTEM_PROMPT = """You are a friendly AI career consultant for CareerHub.
+You help students and job seekers with:
+- resume and CV advice
+- job search strategy
+- interview preparation
+- salary and career growth questions
+
+Rules:
+- Reply with plain conversational text only (no JSON, no markdown code fences).
+- Be concise, practical and encouraging.
+- Respond in the same language the user uses.
+- If you do not know something, say so honestly.
+"""
+
+
+def _strip_code_fences(text: str) -> str:
+    text = (text or "").strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```[a-zA-Z0-9_-]*\s*\n?", "", text)
+        text = re.sub(r"\n?```\s*$", "", text)
+    return text.strip()
 
 
 def _build_user_profile(student_profile: StudentProfile) -> dict[str, Any]:
@@ -167,7 +211,7 @@ def _generate_resume_rule_based(student_profile: StudentProfile) -> dict[str, An
 
 
 async def generate_resume(student_profile: StudentProfile) -> dict[str, Any]:
-    api_key = os.environ.get("GEMINI_API_KEY", "")
+    api_key = _get_api_key()
     if not api_key or not GEMINI_AVAILABLE:
         logger.info("Gemini unavailable, using rule-based resume generation")
         return _generate_resume_rule_based(student_profile)
@@ -210,12 +254,17 @@ async def _chat_with_gemini(
     messages: list[dict[str, str]],
     system_prompt: str = RESUME_CHAT_SYSTEM_PROMPT,
 ) -> str:
-    api_key = os.environ.get("GEMINI_API_KEY", "")
+    api_key = _get_api_key()
     if not api_key or not GEMINI_AVAILABLE:
-        return json.dumps({
-            "message": "AI is currently unavailable. Please try again later or create your resume manually.",
-            "resume_data": None,
-        })
+        if system_prompt == RESUME_CHAT_SYSTEM_PROMPT:
+            return json.dumps({
+                "message": "AI is currently unavailable. Please try again later or create your resume manually.",
+                "ready": False,
+                "resume_data": None,
+            })
+        return (
+            "ИИ сейчас недоступен. Попробуйте позже или создайте резюме вручную."
+        )
 
     try:
         genai.configure(api_key=api_key)
@@ -234,10 +283,13 @@ async def _chat_with_gemini(
         return response.text.strip()
     except Exception as e:
         logger.error(f"Gemini chat failed: {e}")
-        return json.dumps({
-            "message": "Sorry, an error occurred. Please try again.",
-            "resume_data": None,
-        })
+        if system_prompt == RESUME_CHAT_SYSTEM_PROMPT:
+            return json.dumps({
+                "message": "Sorry, an error occurred. Please try again.",
+                "ready": False,
+                "resume_data": None,
+            })
+        return "Произошла ошибка при обращении к ИИ. Попробуйте ещё раз."
 
 
 async def find_matching_jobs(
@@ -287,9 +339,8 @@ async def find_matching_jobs(
             if profile["city"].lower() in job.location_address.lower():
                 score += 10
 
-        if job.work_format:
-            work_prefs = ["online", "offline", "hybrid"]
-            if profile.get("work_format") in job.work_format:
+        if job.work_format and profile.get("work_format"):
+            if str(profile["work_format"]).lower() in str(job.work_format).lower():
                 score += 5
 
         if score > 0:

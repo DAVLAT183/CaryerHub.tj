@@ -25,10 +25,15 @@ export function saveTokens(access: string, refresh: string) {
   setCookie('access_token', access, 1);
 }
 
+export function setEmailVerified(verified: boolean) {
+  setCookie('email_verified', verified ? 'true' : 'false', 7);
+}
+
 export function removeTokens() {
   localStorage.removeItem('access_token');
   localStorage.removeItem('refresh_token');
   removeCookie('access_token');
+  removeCookie('email_verified');
 }
 
 const api = axios.create({
@@ -53,6 +58,19 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    const detail = error.response?.data?.detail;
+    if (error.response?.status === 403 && detail?.code === 'email_not_verified') {
+      setEmailVerified(false);
+      if (
+        typeof window !== 'undefined' &&
+        !window.location.pathname.startsWith('/auth/verify-email')
+      ) {
+        const from = window.location.pathname + window.location.search;
+        window.location.assign(`/auth/verify-email?from=${encodeURIComponent(from)}`);
+      }
+      return Promise.reject(error);
+    }
+
     if (error.response?.status === 401 && !originalRequest._retry) {
       if (isRefreshing) {
         removeTokens();
@@ -65,7 +83,7 @@ api.interceptors.response.use(
       const refreshToken = localStorage.getItem('refresh_token');
       if (refreshToken) {
         try {
-          const res = await axios.post(`${API_URL}/token/refresh/`, {
+          const res = await axios.post(`${API_URL}/auth/token/refresh/`, {
             refresh: refreshToken,
           });
           const { access } = res.data;

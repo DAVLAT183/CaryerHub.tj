@@ -5,10 +5,13 @@ import { Heart } from 'lucide-react';
 import api from '@/lib/api';
 import JobGrid from '@/components/jobs/JobGrid';
 import Skeleton from '@/components/ui/Skeleton';
-import { showToast, getErrorMessage } from '@/lib/utils';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import { showToast, getErrorMessage, getApplicationJobId } from '@/lib/utils';
+import { useI18n } from '@/i18n/I18nContext';
 import type { Job } from '@/types';
 
 export default function FavoritesPage() {
+  const { t } = useI18n();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [jobIds, setJobIds] = useState<number[]>([]);
@@ -27,7 +30,11 @@ export default function FavoritesPage() {
     api.get('/applications/').then((res) => {
       const data = res.data;
       const list = data.results || data;
-      setAppliedJobs(list.map((a: { job: number }) => a.job));
+      setAppliedJobs(
+        list
+          .map((a: { job: unknown }) => getApplicationJobId(a.job))
+          .filter((id: number | null): id is number => id !== null)
+      );
     }).catch(() => {});
   }, []);
 
@@ -36,7 +43,7 @@ export default function FavoritesPage() {
       await api.delete(`/favorites/${jobId}/remove/`);
       setJobs((prev) => prev.filter((j) => j.id !== jobId));
       setJobIds((prev) => prev.filter((id) => id !== jobId));
-      showToast('Удалено из избранного', 'info');
+      showToast(t('notifications.removedFromFavorites'), 'info');
     } catch (err) {
       showToast(getErrorMessage(err), 'error');
     }
@@ -57,13 +64,14 @@ export default function FavoritesPage() {
 
   return (
     <div className="max-w-[1280px] mx-auto px-6 py-8">
-      <h1 className="font-heading font-bold text-2xl md:text-3xl mb-6">Избранное</h1>
+      <Breadcrumbs items={[{ label: t('favorites.title') }]} className="mb-3" />
+      <h1 className="font-heading font-bold text-2xl md:text-3xl mb-6">{t('favorites.title')}</h1>
 
       {jobs.length === 0 ? (
         <div className="text-center py-16">
           <Heart size={48} className="text-muted mx-auto mb-4" />
-          <h3 className="font-heading font-semibold text-lg text-soft mb-2">Нет избранных вакансий</h3>
-          <p className="text-sm text-muted">Сохраняйте вакансии, нажимая на сердечко</p>
+          <h3 className="font-heading font-semibold text-lg text-soft mb-2">{t('favorites.emptyJobs')}</h3>
+          <p className="text-sm text-muted">{t('favorites.saveHint')}</p>
         </div>
       ) : (
         <JobGrid

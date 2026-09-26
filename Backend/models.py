@@ -35,6 +35,7 @@ class User(Base):
     student_profile = relationship("StudentProfile", back_populates="user", uselist=False)
     employer_profile = relationship("EmployerProfile", back_populates="user", uselist=False)
     notifications = relationship("Notification", back_populates="user")
+    notification_prefs = relationship("NotificationPreference", back_populates="user", uselist=False)
     subscriptions = relationship("UserSubscription", back_populates="user")
     payments = relationship("Payment", back_populates="user")
     email_verifications = relationship("EmailVerification", back_populates="user")
@@ -54,6 +55,7 @@ class StudentProfile(Base):
     birth_date = Column(String(10), nullable=True)
     age = Column(Integer, nullable=True)
     city = Column(String(100), default="")
+    views_count = Column(Integer, default=0)
 
     user = relationship("User", back_populates="student_profile")
     resumes = relationship("Resume", back_populates="student")
@@ -70,6 +72,7 @@ class EmployerProfile(Base):
     website = Column(String(500), default="")
     address = Column(String(300), default="")
     is_verified = Column(Boolean, default=False)
+    views_count = Column(Integer, default=0)
 
     user = relationship("User", back_populates="employer_profile")
     jobs = relationship("Job", back_populates="employer")
@@ -152,6 +155,7 @@ class Job(Base):
     source = Column(String(20), default="manual")
     source_url = Column(String(500), default="")
     source_id = Column(String(100), default="")
+    views_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=utcnow)
 
     employer = relationship("EmployerProfile", back_populates="jobs")
@@ -199,6 +203,21 @@ class Notification(Base):
     created_at = Column(DateTime, default=utcnow)
 
     user = relationship("User", back_populates="notifications")
+
+
+class NotificationPreference(Base):
+    __tablename__ = "notification_preferences"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
+    email_jobs = Column(Boolean, default=True)
+    email_applications = Column(Boolean, default=True)
+    email_messages = Column(Boolean, default=True)
+    push_jobs = Column(Boolean, default=False)
+    push_messages = Column(Boolean, default=False)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    user = relationship("User", back_populates="notification_prefs")
 
 
 class ChatSession(Base):

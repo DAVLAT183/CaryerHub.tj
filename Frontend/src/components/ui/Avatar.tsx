@@ -1,9 +1,12 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import { clsx, mediaUrl } from '@/lib/utils';
 
 interface AvatarProps {
   src?: string | null;
   alt?: string;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
 }
 
@@ -11,9 +14,16 @@ const sizeMap = {
   sm: 'w-8 h-8 text-xs',
   md: 'w-10 h-10 text-sm',
   lg: 'w-14 h-14 text-lg',
+  xl: 'w-[72px] h-[72px] text-2xl rounded-2xl',
 };
 
 export default function Avatar({ src, alt = '', size = 'md', className }: AvatarProps) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
   const initials = alt
     .split(' ')
     .map((w) => w[0])
@@ -21,14 +31,15 @@ export default function Avatar({ src, alt = '', size = 'md', className }: Avatar
     .toUpperCase()
     .slice(0, 2);
 
-  const resolvedSrc = mediaUrl(src);
+  const resolvedSrc = failed ? undefined : mediaUrl(src);
 
   if (resolvedSrc) {
     return (
       <img
         src={resolvedSrc}
         alt={alt}
-        className={clsx('rounded-full object-cover border border-[var(--color-border-default)]', sizeMap[size], className)}
+        className={clsx('rounded-xl object-cover border border-[var(--color-border-default)]', sizeMap[size], className)}
+        onError={() => setFailed(true)}
       />
     );
   }
@@ -36,8 +47,8 @@ export default function Avatar({ src, alt = '', size = 'md', className }: Avatar
   return (
     <div
       className={clsx(
-        'rounded-full flex items-center justify-center font-semibold',
-        'bg-accent-primary text-white',
+        'rounded-xl flex items-center justify-center font-bold tracking-tight',
+        'bg-[#7EB6E6] text-white',
         sizeMap[size],
         className
       )}

@@ -1,11 +1,24 @@
 import logging
 import json
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from config import settings
 from database import init_db
 from scheduler import setup_scheduler
+
+BASE_DIR = Path(__file__).resolve().parent
+MEDIA_DIR = BASE_DIR / "media"
+MEDIA_DIR.mkdir(exist_ok=True)
+(MEDIA_DIR / "avatars").mkdir(exist_ok=True)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("careerhub")
@@ -27,6 +40,23 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+
+from rate_limit import RateLimitMiddleware
+
+app.add_middleware(
+    RateLimitMiddleware,
+    limit=settings.RATE_LIMIT,
+    window=settings.RATE_LIMIT_WINDOW,
+)
+
+# CORS must be added last so it is the outermost middleware
+# and wraps rate-limit 429s / exception responses too.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -52,6 +82,8 @@ app.include_router(payments_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
 app.include_router(misc_router)
 app.include_router(ai_router, prefix="/api")
+
+app.mount("/media", StaticFiles(directory=str(MEDIA_DIR)), name="media")
 
 
 @app.get("/")
@@ -92,12 +124,13 @@ class ConnectionManager:
 
 
 ws_manager = ConnectionManager()
+app.state.ws_manager = ws_manager
 
 
 @app.websocket("/ws/notifications/")
 async def websocket_notifications(websocket: WebSocket, token: str = ""):
     from auth import decode_token
-    from database import async_session_factory
+    from database import async_session
     from models import User
     from sqlalchemy import select
 
@@ -113,6 +146,14 @@ async def websocket_notifications(websocket: WebSocket, token: str = ""):
     user_id = int(payload.get("sub", 0))
     if not user_id:
         await websocket.close(code=4001)
+        return
+
+    async with async_session() as session:
+        result = await session.execute(select(User).where(User.id == user_id))
+        db_user = result.scalar_one_or_none()
+
+    if not db_user or not db_user.is_active or not db_user.is_email_verified:
+        await websocket.close(code=4003)
         return
 
     await ws_manager.connect(websocket, user_id)

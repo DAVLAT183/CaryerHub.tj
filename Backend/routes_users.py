@@ -1,8 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import List, Optional
+from datetime import datetime, timezone
+from pathlib import Path
 import re as _re
+import uuid as _uuid
 from database import get_db
 from models import (
     User,
@@ -18,6 +21,7 @@ from models import (
 from schemas import (
     UserResponse,
     UserUpdateRequest,
+    ChangePasswordRequest,
     StudentProfileResponse,
     StudentProfileCreate,
     EmployerProfileResponse,
@@ -25,7 +29,7 @@ from schemas import (
     CategoryResponse,
     CategoryCreate,
 )
-from auth import get_current_user
+from auth import get_current_user, get_optional_user, hash_password, verify_password, require_verified_email
 
 
 def _slugify(text: str) -> str:
@@ -39,7 +43,7 @@ router = APIRouter(tags=["Profiles"])
 
 @router.get("/users/", response_model=List[UserResponse])
 async def list_users(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if current_user.is_staff:
@@ -73,10 +77,23 @@ async def get_current_user_profile(
     return current_user
 
 
+@router.get("/users/{user_id}/", response_model=UserResponse)
+async def get_user_by_id(
+    user_id: int,
+    current_user: User = Depends(require_verified_email),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
 @router.patch("/users/me/", response_model=UserResponse)
 async def update_current_user_profile(
     update_data: UserUpdateRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     update_dict = update_data.model_dump(exclude_unset=True)
@@ -87,9 +104,260 @@ async def update_current_user_profile(
     return current_user
 
 
+_AVATAR_DIR = Path(__file__).resolve().parent / "media" / "avatars"
+_AVATAR_EXTENSIONS = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+}
+_AVATAR_MAX_BYTES = 5 * 1024 * 1024
+
+
+def _delete_stored_avatar(avatar: Optional[str]) -> None:
+    if not avatar or not avatar.startswith("avatars/"):
+        return
+    try:
+        path = Path(__file__).resolve().parent / "media" / avatar
+        if path.is_file():
+            path.unlink()
+    except OSError:
+        pass
+
+
+@router.post("/users/me/avatar/", response_model=UserResponse)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_verified_email),
+    db: AsyncSession = Depends(get_db),
+):
+    content_type = (file.content_type or "").lower()
+    if content_type not in _AVATAR_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Unsupported image format. Use JPEG, PNG, WebP or GIF")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty file")
+    if len(content) > _AVATAR_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="Image is too large (max 5 MB)")
+
+    _AVATAR_DIR.mkdir(parents=True, exist_ok=True)
+    filename = f"{_uuid.uuid4().hex}{_AVATAR_EXTENSIONS[content_type]}"
+    (_AVATAR_DIR / filename).write_bytes(content)
+
+    old_avatar = current_user.avatar
+    current_user.avatar = f"avatars/{filename}"
+    await db.commit()
+    await db.refresh(current_user)
+
+    if old_avatar and old_avatar != current_user.avatar:
+        _delete_stored_avatar(old_avatar)
+
+    return current_user
+
+
+@router.delete("/users/me/avatar/", response_model=UserResponse)
+async def delete_avatar(
+    current_user: User = Depends(require_verified_email),
+    db: AsyncSession = Depends(get_db),
+):
+    old_avatar = current_user.avatar
+    current_user.avatar = ""
+    await db.commit()
+    await db.refresh(current_user)
+    _delete_stored_avatar(old_avatar)
+    return current_user
+
+
+@router.post("/users/me/change-password/")
+async def change_password(
+    payload: ChangePasswordRequest,
+    current_user: User = Depends(require_verified_email),
+    db: AsyncSession = Depends(get_db),
+):
+    if not current_user.hashed_password:
+        raise HTTPException(
+            status_code=400,
+            detail="Password login is not available for this account (signed in via Google)",
+        )
+
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+
+    if len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+
+    if payload.new_password == payload.current_password:
+        raise HTTPException(status_code=400, detail="New password must differ from the current one")
+
+    current_user.hashed_password = hash_password(payload.new_password)
+    await db.commit()
+    return {"detail": "Password updated successfully"}
+
+
+@router.get("/users/me/export/")
+async def export_my_data(
+    current_user: User = Depends(require_verified_email),
+    db: AsyncSession = Depends(get_db),
+):
+    from models import Resume, Application, Favorite, Notification, Payment
+
+    student_profile = (await db.execute(
+        select(StudentProfile).where(StudentProfile.user_id == current_user.id)
+    )).scalar_one_or_none()
+    employer_profile = (await db.execute(
+        select(EmployerProfile).where(EmployerProfile.user_id == current_user.id)
+    )).scalar_one_or_none()
+
+    resumes_data = []
+    applications_data = []
+    favorites_data = []
+    jobs_data = []
+
+    if student_profile:
+        resumes = (await db.execute(
+            select(Resume).where(Resume.student_id == student_profile.id)
+        )).scalars().all()
+        resumes_data = [
+            {
+                "id": r.id,
+                "title": r.title,
+                "about": r.about,
+                "skills": r.skills,
+                "schedule_type": r.schedule_type,
+                "work_format": r.work_format,
+                "github_url": r.github_url,
+                "portfolio_url": r.portfolio_url,
+                "linkedin_url": r.linkedin_url,
+                "style": r.style,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+            }
+            for r in resumes
+        ]
+
+        apps = (await db.execute(
+            select(Application).where(
+                Application.resume_id.in_(
+                    select(Resume.id).where(Resume.student_id == student_profile.id)
+                )
+            )
+        )).scalars().all()
+        applications_data = [
+            {
+                "id": a.id,
+                "job_id": a.job_id,
+                "resume_id": a.resume_id,
+                "status": a.status,
+                "cover_letter": a.cover_letter,
+                "created_at": a.created_at.isoformat() if a.created_at else None,
+            }
+            for a in apps
+        ]
+
+        favs = (await db.execute(
+            select(Favorite).where(Favorite.student_id == student_profile.id)
+        )).scalars().all()
+        favorites_data = [
+            {"job_id": f.job_id, "created_at": f.created_at.isoformat() if f.created_at else None}
+            for f in favs
+        ]
+
+    if employer_profile:
+        jobs = (await db.execute(
+            select(Job).where(Job.employer_id == employer_profile.id)
+        )).scalars().all()
+        jobs_data = [
+            {
+                "id": j.id,
+                "title": j.title,
+                "description": j.description,
+                "salary_min": j.salary_min,
+                "salary_max": j.salary_max,
+                "schedule": j.schedule,
+                "work_format": j.work_format,
+                "is_active": j.is_active,
+                "views_count": j.views_count or 0,
+                "created_at": j.created_at.isoformat() if j.created_at else None,
+            }
+            for j in jobs
+        ]
+
+    notifications = (await db.execute(
+        select(Notification).where(Notification.user_id == current_user.id)
+    )).scalars().all()
+    notifications_data = [
+        {
+            "id": n.id,
+            "type": n.notification_type,
+            "title": n.title,
+            "message": n.message,
+            "is_read": n.is_read,
+            "created_at": n.created_at.isoformat() if n.created_at else None,
+        }
+        for n in notifications
+    ]
+
+    payments = (await db.execute(
+        select(Payment).where(Payment.user_id == current_user.id)
+    )).scalars().all()
+    payments_data = [
+        {
+            "invoice_no": p.invoice_no,
+            "amount": p.amount,
+            "status": p.status,
+            "payment_method": p.payment_method,
+            "paid_at": p.paid_at.isoformat() if p.paid_at else None,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+        }
+        for p in payments
+    ]
+
+    return {
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "profile": {
+            "id": current_user.id,
+            "username": current_user.username,
+            "email": current_user.email,
+            "first_name": current_user.first_name,
+            "last_name": current_user.last_name,
+            "role": current_user.role,
+            "phone": current_user.phone,
+            "location": current_user.location,
+            "avatar": current_user.avatar,
+            "is_email_verified": current_user.is_email_verified,
+            "current_plan": current_user.current_plan,
+            "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
+        },
+        "student_profile": {
+            "university": student_profile.university,
+            "faculty": student_profile.faculty,
+            "course": student_profile.course,
+            "birth_date": student_profile.birth_date,
+            "age": student_profile.age,
+            "city": student_profile.city,
+            "views_count": student_profile.views_count or 0,
+        } if student_profile else None,
+        "employer_profile": {
+            "company_name": employer_profile.company_name,
+            "description": employer_profile.description,
+            "website": employer_profile.website,
+            "address": employer_profile.address,
+            "is_verified": employer_profile.is_verified,
+            "views_count": employer_profile.views_count or 0,
+        } if employer_profile else None,
+        "resumes": resumes_data,
+        "applications": applications_data,
+        "favorites": favorites_data,
+        "jobs": jobs_data,
+        "notifications": notifications_data,
+        "payments": payments_data,
+    }
+
+
 @router.get("/student-profiles/", response_model=List[StudentProfileResponse])
 async def list_student_profiles(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(StudentProfile))
@@ -99,7 +367,7 @@ async def list_student_profiles(
 @router.get("/student-profiles/{profile_id}", response_model=StudentProfileResponse)
 async def get_student_profile(
     profile_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -118,7 +386,7 @@ async def get_student_profile(
 )
 async def create_student_profile(
     profile_data: StudentProfileCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     existing = await db.execute(
@@ -135,11 +403,55 @@ async def create_student_profile(
     return profile
 
 
-@router.put("/student-profiles/{profile_id}", response_model=StudentProfileResponse)
+@router.post("/student-profiles/{profile_id}/view/")
+async def track_student_profile_view(
+    profile_id: int,
+    current_user: User = Depends(require_verified_email),
+    db: AsyncSession = Depends(get_db),
+):
+    profile = (await db.execute(
+        select(StudentProfile).where(StudentProfile.id == profile_id)
+    )).scalar_one_or_none()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Student profile not found")
+
+    if profile.user_id != current_user.id:
+        profile.views_count = (profile.views_count or 0) + 1
+        await db.commit()
+        await db.refresh(profile)
+
+    return {"views_count": profile.views_count}
+
+
+@router.post("/employer-profiles/{profile_id}/view/")
+async def track_employer_profile_view(
+    profile_id: int,
+    current_user: User = Depends(require_verified_email),
+    db: AsyncSession = Depends(get_db),
+):
+    profile = (await db.execute(
+        select(EmployerProfile).where(EmployerProfile.id == profile_id)
+    )).scalar_one_or_none()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Employer profile not found")
+
+    if profile.user_id != current_user.id:
+        profile.views_count = (profile.views_count or 0) + 1
+        await db.commit()
+        await db.refresh(profile)
+
+    return {"views_count": profile.views_count}
+
+
+@router.api_route(
+    "/student-profiles/{profile_id}",
+    methods=["PUT", "PATCH"],
+    response_model=StudentProfileResponse,
+)
 async def update_student_profile(
     profile_id: int,
     profile_data: StudentProfileCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -150,7 +462,7 @@ async def update_student_profile(
         raise HTTPException(status_code=404, detail="Student profile not found")
     if profile.user_id != current_user.id and not current_user.is_staff:
         raise HTTPException(status_code=403, detail="Not authorized to update this profile")
-    for field, value in profile_data.model_dump().items():
+    for field, value in profile_data.model_dump(exclude_unset=True).items():
         setattr(profile, field, value)
     await db.commit()
     await db.refresh(profile)
@@ -160,7 +472,7 @@ async def update_student_profile(
 @router.delete("/student-profiles/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_student_profile(
     profile_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -175,19 +487,70 @@ async def delete_student_profile(
     await db.commit()
 
 
-@router.get("/employer-profiles/", response_model=List[EmployerProfileResponse])
+async def _serialize_employer_profile(profile: EmployerProfile, db: AsyncSession) -> dict:
+    user_result = await db.execute(select(User).where(User.id == profile.user_id))
+    user_obj = user_result.scalar_one_or_none()
+    return {
+        "id": profile.id,
+        "user_id": profile.user_id,
+        "user": {
+            "id": user_obj.id,
+            "username": user_obj.username,
+            "email": user_obj.email,
+            "first_name": user_obj.first_name,
+            "last_name": user_obj.last_name,
+            "role": user_obj.role,
+            "phone": user_obj.phone,
+            "avatar": user_obj.avatar,
+            "location": user_obj.location,
+        } if user_obj else None,
+        "company_name": profile.company_name,
+        "description": profile.description,
+        "website": profile.website,
+        "address": profile.address,
+        "is_verified": profile.is_verified,
+        "views_count": profile.views_count or 0,
+    }
+
+
+@router.get("/employer-profiles/")
 async def list_employer_profiles(
-    current_user: User = Depends(get_current_user),
+    search: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    mine: bool = False,
+    current_user: Optional[User] = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(EmployerProfile))
-    return result.scalars().all()
+    query = select(EmployerProfile)
+    if mine:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        query = query.where(EmployerProfile.user_id == current_user.id)
+    if search:
+        query = query.where(
+            EmployerProfile.company_name.ilike(f"%{search}%")
+            | EmployerProfile.description.ilike(f"%{search}%")
+        )
+
+    count_q = select(func.count()).select_from(query.subquery())
+    total = (await db.execute(count_q)).scalar() or 0
+
+    page_size = 10
+    query = query.order_by(EmployerProfile.company_name).offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(query)
+    profiles = result.scalars().all()
+
+    return {
+        "count": total,
+        "page": page,
+        "results": [await _serialize_employer_profile(p, db) for p in profiles],
+    }
 
 
-@router.get("/employer-profiles/{profile_id}", response_model=EmployerProfileResponse)
+@router.get("/employer-profiles/{profile_id}")
 async def get_employer_profile(
     profile_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -196,7 +559,7 @@ async def get_employer_profile(
     profile = result.scalar_one_or_none()
     if not profile:
         raise HTTPException(status_code=404, detail="Employer profile not found")
-    return profile
+    return await _serialize_employer_profile(profile, db)
 
 
 @router.post(
@@ -206,7 +569,7 @@ async def get_employer_profile(
 )
 async def create_employer_profile(
     profile_data: EmployerProfileCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     existing = await db.execute(
@@ -223,11 +586,15 @@ async def create_employer_profile(
     return profile
 
 
-@router.put("/employer-profiles/{profile_id}", response_model=EmployerProfileResponse)
+@router.api_route(
+    "/employer-profiles/{profile_id}",
+    methods=["PUT", "PATCH"],
+    response_model=EmployerProfileResponse,
+)
 async def update_employer_profile(
     profile_id: int,
     profile_data: EmployerProfileCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -238,7 +605,7 @@ async def update_employer_profile(
         raise HTTPException(status_code=404, detail="Employer profile not found")
     if profile.user_id != current_user.id and not current_user.is_staff:
         raise HTTPException(status_code=403, detail="Not authorized to update this profile")
-    for field, value in profile_data.model_dump().items():
+    for field, value in profile_data.model_dump(exclude_unset=True).items():
         setattr(profile, field, value)
     await db.commit()
     await db.refresh(profile)
@@ -248,7 +615,7 @@ async def update_employer_profile(
 @router.delete("/employer-profiles/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_employer_profile(
     profile_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -265,7 +632,6 @@ async def delete_employer_profile(
 
 @router.get("/categories/", response_model=List[CategoryResponse])
 async def list_categories(
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(Category))
@@ -275,7 +641,6 @@ async def list_categories(
 @router.get("/categories/{slug}", response_model=CategoryResponse)
 async def get_category(
     slug: str,
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(Category).where(Category.slug == slug))
@@ -292,7 +657,7 @@ async def get_category(
 )
 async def create_category(
     category_data: CategoryCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if not current_user.is_staff:
@@ -313,7 +678,7 @@ async def create_category(
 async def update_category(
     slug: str,
     category_data: CategoryCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if not current_user.is_staff:
@@ -332,7 +697,7 @@ async def update_category(
 @router.delete("/categories/{slug}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_category(
     slug: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if not current_user.is_staff:
@@ -347,7 +712,7 @@ async def delete_category(
 
 @router.get("/work-schedules/")
 async def list_work_schedules(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(WorkSchedule))
@@ -361,7 +726,7 @@ async def list_work_schedules(
 )
 async def create_work_schedule(
     name: str = Query(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if not current_user.is_staff:
@@ -378,7 +743,7 @@ async def create_work_schedule(
 async def update_work_schedule(
     ws_id: int,
     name: str = Query(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if not current_user.is_staff:
@@ -397,7 +762,7 @@ async def update_work_schedule(
 @router.delete("/work-schedules/{ws_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_work_schedule(
     ws_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if not current_user.is_staff:
@@ -412,7 +777,7 @@ async def delete_work_schedule(
 
 @router.get("/work-formats/")
 async def list_work_formats(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(WorkFormat))
@@ -426,7 +791,7 @@ async def list_work_formats(
 )
 async def create_work_format(
     name: str = Query(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if not current_user.is_staff:
@@ -443,7 +808,7 @@ async def create_work_format(
 async def update_work_format(
     wf_id: int,
     name: str = Query(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if not current_user.is_staff:
@@ -462,7 +827,7 @@ async def update_work_format(
 @router.delete("/work-formats/{wf_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_work_format(
     wf_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if not current_user.is_staff:
@@ -477,7 +842,7 @@ async def delete_work_format(
 
 @router.get("/work-experiences/")
 async def list_work_experiences(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(WorkExperience))
@@ -491,7 +856,7 @@ async def list_work_experiences(
 )
 async def create_work_experience(
     name: str = Query(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if not current_user.is_staff:
@@ -508,7 +873,7 @@ async def create_work_experience(
 async def update_work_experience(
     we_id: int,
     name: str = Query(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if not current_user.is_staff:
@@ -527,7 +892,7 @@ async def update_work_experience(
 @router.delete("/work-experiences/{we_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_work_experience(
     we_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if not current_user.is_staff:

@@ -62,7 +62,7 @@ export default function ResumeGeneratorModal({ open, onClose, onCreated }: Resum
       const assistantMsg: Message = { role: 'assistant', content: data.message };
       setMessages((prev) => [...prev, assistantMsg]);
 
-      if (data.resume_data) {
+      if (data.resume_data?.title && Array.isArray(data.resume_data.skills) && data.resume_data.skills.length > 0) {
         setResumeData(data.resume_data);
         showToast('Резюме сгенерировано!', 'success');
       }
@@ -109,6 +109,12 @@ export default function ResumeGeneratorModal({ open, onClose, onCreated }: Resum
     setSaving(false);
     onClose();
   };
+
+  const isResumeReady =
+    !!resumeData &&
+    !!String(resumeData.title || '').trim() &&
+    Array.isArray(resumeData.skills) &&
+    resumeData.skills.length > 0;
 
   if (!open) return null;
 
@@ -169,7 +175,7 @@ export default function ResumeGeneratorModal({ open, onClose, onCreated }: Resum
         </div>
 
         {/* Resume preview + save button */}
-        {resumeData && (
+        {isResumeReady && (
           <div className="mx-5 mb-3 p-4 rounded-xl bg-accent-primary/5 border border-accent-primary/20">
             <div className="flex items-center gap-2 mb-2">
               <Sparkles size={14} className="text-accent-primary" />
@@ -186,7 +192,7 @@ export default function ResumeGeneratorModal({ open, onClose, onCreated }: Resum
         )}
 
         {/* Input */}
-        {!resumeData && (
+        {!isResumeReady && (
           <div className="px-5 pb-4 pt-2 border-t border-border-default">
             <div className="flex gap-2">
               <input

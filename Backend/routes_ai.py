@@ -10,7 +10,7 @@ from sqlalchemy import select
 from database import get_db
 from models import Resume, StudentProfile, Job, User
 from schemas import ResumeResponse, JobResponse
-from auth import get_current_user
+from auth import get_current_user, require_verified_email
 from ai_service import generate_resume, _chat_with_gemini, find_matching_jobs
 
 logger = logging.getLogger("careerhub.ai")
@@ -47,7 +47,7 @@ async def _get_student_profile(user: User, db: AsyncSession) -> StudentProfile:
 
 @router.post("/generate-resume/")
 async def generate_resume_endpoint(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if user.role != "student":
@@ -63,7 +63,7 @@ async def generate_resume_endpoint(
 
 @router.post("/create-resume/", response_model=ResumeResponse)
 async def create_resume_endpoint(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if user.role != "student":
@@ -96,7 +96,7 @@ async def create_resume_endpoint(
 @router.post("/resume-chat/")
 async def resume_chat_endpoint(
     request: ResumeChatRequest,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if user.role != "student":
@@ -109,20 +109,34 @@ async def resume_chat_endpoint(
 
     raw_response = await _chat_with_gemini(messages)
 
+    from ai_service import _strip_code_fences
+
     try:
-        parsed = json.loads(raw_response)
+        parsed = json.loads(_strip_code_fences(raw_response))
         ai_message = parsed.get("message", "I couldn't process that.")
-        resume_data = parsed.get("resume_data")
+        ready = bool(parsed.get("ready"))
+        resume_data = parsed.get("resume_data") if ready else None
+        if isinstance(resume_data, dict):
+            if not (
+                str(resume_data.get("title") or "").strip()
+                and isinstance(resume_data.get("skills"), list)
+                and resume_data.get("skills")
+                and resume_data.get("schedule_type")
+                and resume_data.get("work_format")
+            ):
+                resume_data = None
+        else:
+            resume_data = None
     except (json.JSONDecodeError, TypeError):
-        ai_message = raw_response
+        ai_message = _strip_code_fences(raw_response)
         resume_data = None
 
     return {"message": ai_message, "resume_data": resume_data}
 
 
-@router.get("/recommend-jobs/", response_model=list[JobRecommendation])
+@router.get("/recommend-jobs/")
 async def recommend_jobs_endpoint(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if user.role != "student":
@@ -147,8 +161,8 @@ async def recommend_jobs_endpoint(
             job_resp = JobResponse.model_validate(job)
         except Exception:
             continue
-        recommendations.append(
-            JobRecommendation(job=job_resp, match_score=item["match_score"])
-        )
+        payload = job_resp.model_dump()
+        payload["match_score"] = item["match_score"]
+        recommendations.append(payload)
 
     return recommendations

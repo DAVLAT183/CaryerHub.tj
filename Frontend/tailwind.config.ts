@@ -29,6 +29,8 @@ const config: Config = {
           primary: 'var(--color-accent-primary)',
           'primary-hover': 'var(--color-accent-primary-hover)',
           'primary-muted': 'var(--color-accent-primary-muted)',
+          cyan: 'var(--color-accent-cyan)',
+          'cyan-hover': 'var(--color-accent-cyan-hover)',
         },
         text: {
           primary: 'var(--color-text-primary)',

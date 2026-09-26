@@ -60,6 +60,7 @@ CATEGORY_MAP = {
     "hr": "HR",
     "engineering": "Инженерия",
     "education": "Образование",
+    "analytics": "Аналитика",
     "other": "Другое",
 }
 
@@ -183,8 +184,10 @@ def _parse_salary(text: str):
 
 
 async def _get_or_create_category(db: AsyncSession, name: str, slug: str):
-    result = await db.execute(select(Category).where(Category.slug == slug))
-    cat = result.scalar_one_or_none()
+    result = await db.execute(
+        select(Category).where((Category.slug == slug) | (Category.name == name))
+    )
+    cat = result.scalars().first()
     if not cat:
         cat = Category(name=name, slug=slug)
         db.add(cat)
@@ -249,8 +252,10 @@ async def _save_job(db: AsyncSession, job_data: dict, source: str):
 
     ai_result = await _ai_classify_job(job_data.get("title", ""), job_data.get("description", ""))
 
-    category_slug = ai_result.get("category", "other")
-    category_name = CATEGORY_MAP.get(category_slug, "Другое")
+    category_slug = str(ai_result.get("category", "other")).lower().strip()
+    if category_slug not in CATEGORY_MAP:
+        category_slug = "other"
+    category_name = CATEGORY_MAP[category_slug]
     category = await _get_or_create_category(db, category_name, category_slug)
 
     employer = await _get_or_create_employer(db, job_data.get("company", ""))
@@ -362,11 +367,6 @@ async def parse_somon_tj(db: AsyncSession, max_jobs: int = 30) -> dict:
 async def parse_remotive(db: AsyncSession, max_jobs: int = 50) -> dict:
     results = {"created": 0, "updated": 0, "errors": 0, "source": "remotive"}
 
-    proxy_url = _get_proxy_url()
-    if not proxy_url:
-        logger.warning("remotive: прокси не настроен, пропуск (иностранный сайт)")
-        return {"success": True, "skipped": True, "reason": "no_proxy", **results}
-
     async with _make_client(proxy=True) as client:
         try:
             resp = await client.get("https://remotive.com/api/remote-jobs?limit=50")
@@ -410,11 +410,6 @@ async def parse_remotive(db: AsyncSession, max_jobs: int = 50) -> dict:
 
 async def parse_arbeitnow(db: AsyncSession, max_jobs: int = 50) -> dict:
     results = {"created": 0, "updated": 0, "errors": 0, "source": "arbeitnow"}
-
-    proxy_url = _get_proxy_url()
-    if not proxy_url:
-        logger.warning("arbeitnow: прокси не настроен, пропуск (иностранный сайт)")
-        return {"success": True, "skipped": True, "reason": "no_proxy", **results}
 
     async with _make_client(proxy=True) as client:
         try:
@@ -463,11 +458,6 @@ async def parse_arbeitnow(db: AsyncSession, max_jobs: int = 50) -> dict:
 
 async def parse_himalayas(db: AsyncSession, max_jobs: int = 50) -> dict:
     results = {"created": 0, "updated": 0, "errors": 0, "source": "himalayas"}
-
-    proxy_url = _get_proxy_url()
-    if not proxy_url:
-        logger.warning("himalayas: прокси не настроен, пропуск (иностранный сайт)")
-        return {"success": True, "skipped": True, "reason": "no_proxy", **results}
 
     async with _make_client(proxy=True) as client:
         try:

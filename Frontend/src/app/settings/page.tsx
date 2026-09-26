@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { User, Moon, Sun, Monitor, Bell, Shield, Palette, Globe, Save, Loader2 } from 'lucide-react';
+import { User, Moon, Sun, Monitor, Bell, Shield, Palette, Globe, Save, Loader2, KeyRound, Download } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { useI18n } from '@/i18n/I18nContext';
 import { useTheme } from '@/i18n/ThemeContext';
 import api from '@/lib/api';
 import Input from '@/components/ui/Input';
@@ -10,16 +11,26 @@ import Textarea from '@/components/ui/Textarea';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Skeleton from '@/components/ui/Skeleton';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import { showToast, getErrorMessage } from '@/lib/utils';
 import type { StudentProfile } from '@/types';
 
 export default function SettingsPage() {
   const { user, updateUser } = useAuth();
+  const { t } = useI18n();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'profile' | 'appearance' | 'notifications' | 'security'>('profile');
+
+  const [pwdForm, setPwdForm] = useState({
+    current_password: '',
+    new_password: '',
+    confirm_password: '',
+  });
+  const [pwdSaving, setPwdSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const [form, setForm] = useState({
     first_name: '',
@@ -41,6 +52,26 @@ export default function SettingsPage() {
     push_jobs: false,
     push_messages: false,
   });
+  const [notifLoading, setNotifLoading] = useState(false);
+  const [notifSaving, setNotifSaving] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    setNotifLoading(true);
+    api.get('/notification-settings/')
+      .then((r) => {
+        const d = r.data;
+        setNotifications({
+          email_jobs: d.email_jobs ?? true,
+          email_applications: d.email_applications ?? true,
+          email_messages: d.email_messages ?? true,
+          push_jobs: d.push_jobs ?? false,
+          push_messages: d.push_messages ?? false,
+        });
+      })
+      .catch(() => {})
+      .finally(() => setNotifLoading(false));
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -95,7 +126,7 @@ export default function SettingsPage() {
         const res = await api.get(`/student-profiles/${profile.id}/`);
         setProfile(res.data);
       }
-      showToast('Профиль сохранён', 'success');
+      showToast(t('settings.profileSaved'), 'success');
     } catch (err) {
       showToast(getErrorMessage(err), 'error');
     } finally {
@@ -104,11 +135,64 @@ export default function SettingsPage() {
   };
 
   const saveNotifications = async () => {
-    showToast('Настройки уведомлений сохранены (требуется backend)', 'info');
+    setNotifSaving(true);
+    try {
+      await api.put('/notification-settings/', notifications);
+      showToast(t('settings.notifSaved'), 'success');
+    } catch (err) {
+      showToast(getErrorMessage(err), 'error');
+    } finally {
+      setNotifSaving(false);
+    }
   };
 
   const changePassword = async () => {
-    showToast('Смена пароля: перейдите в настройки аккаунта', 'info');
+    if (!pwdForm.current_password || !pwdForm.new_password) {
+      showToast(t('settings.fillAllPwdFields'), 'error');
+      return;
+    }
+    if (pwdForm.new_password.length < 8) {
+      showToast(t('settings.pwdMin8'), 'error');
+      return;
+    }
+    if (pwdForm.new_password !== pwdForm.confirm_password) {
+      showToast(t('auth.passwordMismatch'), 'error');
+      return;
+    }
+    setPwdSaving(true);
+    try {
+      await api.post('/users/me/change-password/', {
+        current_password: pwdForm.current_password,
+        new_password: pwdForm.new_password,
+      });
+      setPwdForm({ current_password: '', new_password: '', confirm_password: '' });
+      showToast(t('settings.pwdChanged'), 'success');
+    } catch (err) {
+      showToast(getErrorMessage(err), 'error');
+    } finally {
+      setPwdSaving(false);
+    }
+  };
+
+  const exportData = async () => {
+    setExporting(true);
+    try {
+      const res = await api.get('/users/me/export/');
+      const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `careerhub_export_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      showToast(t('settings.dataExported'), 'success');
+    } catch (err) {
+      showToast(getErrorMessage(err), 'error');
+    } finally {
+      setExporting(false);
+    }
   };
 
   if (loading) {
@@ -128,15 +212,16 @@ export default function SettingsPage() {
   }
 
   const tabs = [
-    { id: 'profile', label: 'Профиль', icon: User },
-    { id: 'appearance', label: 'Внешний вид', icon: Palette },
-    { id: 'notifications', label: 'Уведомления', icon: Bell },
-    { id: 'security', label: 'Безопасность', icon: Shield },
+    { id: 'profile', label: t('settings.tabProfile'), icon: User },
+    { id: 'appearance', label: t('settings.tabAppearance'), icon: Palette },
+    { id: 'notifications', label: t('settings.tabNotifications'), icon: Bell },
+    { id: 'security', label: t('settings.tabSecurity'), icon: Shield },
   ];
 
   return (
     <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
-      <h1 className="font-heading font-bold text-xl sm:text-2xl md:text-3xl mb-4 sm:mb-6">Настройки</h1>
+      <Breadcrumbs items={[{ label: t('settings.title') }]} className="mb-3" />
+      <h1 className="font-heading font-bold text-xl sm:text-2xl md:text-3xl mb-4 sm:mb-6">{t('settings.title')}</h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
         <div>
@@ -146,7 +231,7 @@ export default function SettingsPage() {
                 <User size={28} className="text-white" />
               </div>
               <h2 className="font-heading font-semibold text-lg">{user?.username}</h2>
-              <p className="text-xs text-muted mt-1 capitalize">{user?.role === 'employer' ? 'Работодатель' : 'Студент'}</p>
+              <p className="text-xs text-muted mt-1 capitalize">{user?.role === 'employer' ? t('nav.employer') : t('auth.roleStudent')}</p>
             </div>
             <nav className="p-2 space-y-1 overflow-x-auto">
               {tabs.map((tab) => (
@@ -171,36 +256,36 @@ export default function SettingsPage() {
           {activeTab === 'profile' && (
             <Card>
               <div className="p-6 border-b border-border-default">
-                <h3 className="font-heading font-semibold">Личные данные</h3>
-                <p className="text-xs text-muted mt-1">Информация, видимая работодателям</p>
+                <h3 className="font-heading font-semibold">{t('settings.personalData')}</h3>
+                <p className="text-xs text-muted mt-1">{t('settings.personalDataDesc')}</p>
               </div>
               <div className="p-6 space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input
-                    label="Имя"
+                    label={t('settings.firstName')}
                     value={form.first_name}
                     onChange={(e) => setForm((f) => ({ ...f, first_name: e.target.value }))}
                   />
                   <Input
-                    label="Фамилия"
+                    label={t('settings.lastName')}
                     value={form.last_name}
                     onChange={(e) => setForm((f) => ({ ...f, last_name: e.target.value }))}
                   />
                 </div>
                 <Input
-                  label="Email"
+                  label={t('auth.email')}
                   value={form.email}
                   onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
                   disabled
                 />
                 <Input
-                  label="Телефон"
+                  label={t('auth.phone')}
                   value={form.phone}
                   onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
                   placeholder="+7 (xxx) xxx-xx-xx"
                 />
                 <Input
-                  label="Место проживания"
+                  label={t('profile.location')}
                   value={form.location}
                   onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
                   placeholder="Душанбе, Таджикистан"
@@ -209,19 +294,19 @@ export default function SettingsPage() {
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <Input
-                        label="Университет"
+                        label={t('profile.university')}
                         value={form.university}
                         onChange={(e) => setForm((f) => ({ ...f, university: e.target.value }))}
                       />
                       <Input
-                        label="Факультет"
+                        label={t('profile.faculty')}
                         value={form.faculty}
                         onChange={(e) => setForm((f) => ({ ...f, faculty: e.target.value }))}
                       />
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <Input
-                        label="Курс"
+                        label={t('profile.course')}
                         value={form.course}
                         onChange={(e) => setForm((f) => ({ ...f, course: e.target.value }))}
                         type="number"
@@ -229,13 +314,13 @@ export default function SettingsPage() {
                         max="6"
                       />
                       <Input
-                        label="Город"
+                        label={t('profile.city')}
                         value={form.city}
                         onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
                       />
                     </div>
                     <Input
-                      label="Дата рождения"
+                      label={t('profile.birthDate')}
                       type="date"
                       value={form.birth_date}
                       onChange={(e) => setForm((f) => ({ ...f, birth_date: e.target.value }))}
@@ -244,7 +329,7 @@ export default function SettingsPage() {
                 )}
                 <Button onClick={saveProfile} loading={saving} className="w-full sm:w-auto">
                   <Save size={16} className="mr-2" />
-                  Сохранить изменения
+                  {t('settings.saveChanges')}
                 </Button>
               </div>
             </Card>
@@ -253,33 +338,33 @@ export default function SettingsPage() {
           {activeTab === 'appearance' && (
             <Card>
               <div className="p-6 border-b border-border-default">
-                <h3 className="font-heading font-semibold">Тема и внешний вид</h3>
-                <p className="text-xs text-muted mt-1">Настройте отображение интерфейса</p>
+                <h3 className="font-heading font-semibold">{t('settings.appearance')}</h3>
+                <p className="text-xs text-muted mt-1">{t('settings.appearanceDesc')}</p>
               </div>
               <div className="p-6 space-y-6">
                 <div>
-                  <h4 className="font-medium text-sm text-text-secondary mb-4">Тема</h4>
+                  <h4 className="font-medium text-sm text-text-secondary mb-4">{t('settings.theme')}</h4>
                   <div className="grid grid-cols-3 gap-3">
-                    {(['light', 'dark', 'system'] as const).map((t) => (
+                    {(['light', 'dark', 'system'] as const).map((th) => (
                       <button
-                        key={t}
-                        onClick={() => setTheme(t)}
+                        key={th}
+                        onClick={() => setTheme(th)}
                         className={`p-4 rounded-lg border-2 transition-all ${
-                          theme === t
+                          theme === th
                             ? 'border-accent-primary bg-accent-primary/5'
                             : 'border-border-default hover:border-border-hover'
                         }`}
                       >
                         <div className="flex items-center justify-center gap-2 mb-2">
-                          {t === 'light' && <Sun size={20} className="text-warning" />}
-                          {t === 'dark' && <Moon size={20} className="text-info" />}
-                          {t === 'system' && <Monitor size={20} className="text-accent-primary" />}
+                          {th === 'light' && <Sun size={20} className="text-warning" />}
+                          {th === 'dark' && <Moon size={20} className="text-info" />}
+                          {th === 'system' && <Monitor size={20} className="text-accent-primary" />}
                         </div>
-                        <span className="text-sm font-medium capitalize">{t}</span>
+                        <span className="text-sm font-medium capitalize">{th}</span>
                         <span className="text-xs text-muted block mt-1">
-                          {t === 'light' && 'Светлая'}
-                          {t === 'dark' && 'Тёмная'}
-                          {t === 'system' && 'По системе'}
+                          {th === 'light' && t('settings.light')}
+                          {th === 'dark' && t('settings.dark')}
+                          {th === 'system' && t('settings.system')}
                         </span>
                       </button>
                     ))}
@@ -287,9 +372,9 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="pt-6 border-t border-border-default">
-                  <h4 className="font-medium text-sm text-text-secondary mb-4">Текущая тема: <span className="text-accent-primary capitalize">{resolvedTheme}</span></h4>
+                  <h4 className="font-medium text-sm text-text-secondary mb-4">{t('settings.currentTheme')}: <span className="text-accent-primary capitalize">{resolvedTheme}</span></h4>
                   <div className="p-4 rounded-lg bg-surface-hover border border-border-default">
-                    <p className="text-sm text-text-secondary">Предпросмотр карточки вакансии</p>
+                    <p className="text-sm text-text-secondary">{t('settings.preview')}</p>
                     <div className="mt-3 p-3 rounded-card bg-surface-card border border-border-default">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-lg bg-accent-primary/20 flex items-center justify-center">
@@ -302,8 +387,8 @@ export default function SettingsPage() {
                       </div>
                       <div className="mt-3 flex gap-2 flex-wrap">
                         <span className="tag px-2 py-1 text-xs">100 000 - 150 000 сомони</span>
-                        <span className="tag px-2 py-1 text-xs">Удалённо</span>
-                        <span className="tag px-2 py-1 text-xs">Полная занятость</span>
+                        <span className="tag px-2 py-1 text-xs">{t('jobs.remote')}</span>
+                        <span className="tag px-2 py-1 text-xs">{t('jobs.fullTime')}</span>
                       </div>
                     </div>
                   </div>
@@ -315,8 +400,8 @@ export default function SettingsPage() {
           {activeTab === 'notifications' && (
             <Card>
               <div className="p-6 border-b border-border-default">
-                <h3 className="font-heading font-semibold">Уведомления</h3>
-                <p className="text-xs text-muted mt-1">Настройте, какие уведомления получать</p>
+                <h3 className="font-heading font-semibold">{t('settings.tabNotifications')}</h3>
+                <p className="text-xs text-muted mt-1">{t('settings.notifDesc')}</p>
               </div>
               <div className="p-6 space-y-6">
                 <div className="space-y-1">
@@ -325,8 +410,8 @@ export default function SettingsPage() {
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-primary"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
                     </div>
                     <div>
-                      <h4 className="font-medium text-sm text-text-primary">Email уведомления</h4>
-                      <p className="text-xs text-muted">Получать на почту</p>
+                      <h4 className="font-medium text-sm text-text-primary">{t('settings.emailNotifs')}</h4>
+                      <p className="text-xs text-muted">{t('settings.emailNotifsDesc')}</p>
                     </div>
                   </div>
 
@@ -337,8 +422,8 @@ export default function SettingsPage() {
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500"><path d="M16 22h2c.5 0 1-.2 1.4-.5.3-.3.5-.7.5-1.2V9.5L13.5 4H12v18h2"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>
                         </div>
                         <div>
-                          <p className="font-medium text-sm text-text-primary">Новые вакансии</p>
-                          <p className="text-xs text-muted">Рекомендации под ваш профиль</p>
+                          <p className="font-medium text-sm text-text-primary">{t('settings.newJobs')}</p>
+                          <p className="text-xs text-muted">{t('settings.newJobsDesc')}</p>
                         </div>
                       </div>
                       <div className="relative">
@@ -359,8 +444,8 @@ export default function SettingsPage() {
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-500"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
                         </div>
                         <div>
-                          <p className="font-medium text-sm text-text-primary">Отклики на вакансии</p>
-                          <p className="text-xs text-muted">Статус рассмотрения, приглашения на собеседование</p>
+                          <p className="font-medium text-sm text-text-primary">{t('settings.applicationsNotif')}</p>
+                          <p className="text-xs text-muted">{t('settings.applicationsNotifDesc')}</p>
                         </div>
                       </div>
                       <div className="relative">
@@ -381,8 +466,8 @@ export default function SettingsPage() {
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-cyan-500"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/></svg>
                         </div>
                         <div>
-                          <p className="font-medium text-sm text-text-primary">Сообщения от работодателей</p>
-                          <p className="text-xs text-muted">Новые сообщения в чате</p>
+                          <p className="font-medium text-sm text-text-primary">{t('settings.employerMessages')}</p>
+                          <p className="text-xs text-muted">{t('settings.employerMessagesDesc')}</p>
                         </div>
                       </div>
                       <div className="relative">
@@ -405,8 +490,8 @@ export default function SettingsPage() {
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-violet-500"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
                     </div>
                     <div>
-                      <h4 className="font-medium text-sm text-text-primary">Push уведомления</h4>
-                      <p className="text-xs text-muted">Мгновенные оповещения в браузере</p>
+                      <h4 className="font-medium text-sm text-text-primary">{t('settings.pushNotifs')}</h4>
+                      <p className="text-xs text-muted">{t('settings.pushNotifsDesc')}</p>
                     </div>
                   </div>
 
@@ -417,8 +502,8 @@ export default function SettingsPage() {
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-500"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                         </div>
                         <div>
-                          <p className="font-medium text-sm text-text-primary">Новые вакансии</p>
-                          <p className="text-xs text-muted">Мгновенные уведомления о подходящих вакансиях</p>
+                          <p className="font-medium text-sm text-text-primary">{t('settings.newJobs')}</p>
+                          <p className="text-xs text-muted">{t('settings.pushJobsDesc')}</p>
                         </div>
                       </div>
                       <div className="relative">
@@ -439,8 +524,8 @@ export default function SettingsPage() {
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-rose-500"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                         </div>
                         <div>
-                          <p className="font-medium text-sm text-text-primary">Сообщения</p>
-                          <p className="text-xs text-muted">Уведомления о новых сообщениях в реальном времени</p>
+                          <p className="font-medium text-sm text-text-primary">{t('settings.messages')}</p>
+                          <p className="text-xs text-muted">{t('settings.messagesDesc')}</p>
                         </div>
                       </div>
                       <div className="relative">
@@ -458,9 +543,9 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="flex items-center gap-3 pt-2">
-                  <Button onClick={saveNotifications} variant="primary">
+                  <Button onClick={saveNotifications} variant="primary" loading={notifSaving} disabled={notifLoading}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                    Сохранить настройки
+                    {t('settings.saveSettings')}
                   </Button>
                 </div>
               </div>
@@ -470,18 +555,41 @@ export default function SettingsPage() {
           {activeTab === 'security' && (
             <Card>
               <div className="p-6 border-b border-border-default">
-                <h3 className="font-heading font-semibold">Безопасность</h3>
-                <p className="text-xs text-muted mt-1">Управление доступом к аккаунту</p>
+                <h3 className="font-heading font-semibold">{t('settings.tabSecurity')}</h3>
+                <p className="text-xs text-muted mt-1">{t('settings.securityDesc')}</p>
               </div>
               <div className="p-6 space-y-6">
                 <div className="p-4 rounded-lg bg-surface-hover border border-border-default">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-medium">Смена пароля</h4>
-                      <p className="text-xs text-muted">Рекомендуется менять пароль раз в 3 месяца</p>
+                  <div className="flex items-center gap-2 mb-4">
+                    <KeyRound size={16} className="text-accent-primary" />
+                    <h4 className="font-medium">{t('settings.passwordChange')}</h4>
+                  </div>
+                  <div className="space-y-3">
+                    <Input
+                      label={t('settings.currentPassword')}
+                      type="password"
+                      value={pwdForm.current_password}
+                      onChange={(e) => setPwdForm((f) => ({ ...f, current_password: e.target.value }))}
+                      placeholder="••••••••"
+                    />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <Input
+                        label={t('settings.newPassword')}
+                        type="password"
+                        value={pwdForm.new_password}
+                        onChange={(e) => setPwdForm((f) => ({ ...f, new_password: e.target.value }))}
+                        placeholder={t('settings.min8')}
+                      />
+                      <Input
+                        label={t('settings.confirmNewPassword')}
+                        type="password"
+                        value={pwdForm.confirm_password}
+                        onChange={(e) => setPwdForm((f) => ({ ...f, confirm_password: e.target.value }))}
+                        placeholder="••••••••"
+                      />
                     </div>
-                    <Button variant="secondary" size="sm" onClick={changePassword}>
-                      Изменить
+                    <Button size="sm" onClick={changePassword} loading={pwdSaving}>
+                      {t('auth.resetPasswordButton')}
                     </Button>
                   </div>
                 </div>
@@ -489,11 +597,24 @@ export default function SettingsPage() {
                 <div className="p-4 rounded-lg bg-surface-hover border border-border-default">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h4 className="font-medium">Двухфакторная аутентификация (2FA)</h4>
-                      <p className="text-xs text-muted">Дополнительная защита аккаунта</p>
+                      <h4 className="font-medium">{t('settings.exportTitle')}</h4>
+                      <p className="text-xs text-muted">{t('settings.exportDesc')}</p>
+                    </div>
+                    <Button variant="secondary" size="sm" onClick={exportData} loading={exporting}>
+                      <Download size={14} className="mr-1.5" />
+                      {t('settings.exportBtn')}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-lg bg-surface-hover border border-border-default">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-medium">{t('settings.twoFactor')} (2FA)</h4>
+                      <p className="text-xs text-muted">{t('settings.twoFactorDesc')}</p>
                     </div>
                     <Button variant="secondary" size="sm" disabled>
-                      Настроить (скоро)
+                      {t('settings.soon')}
                     </Button>
                   </div>
                 </div>
@@ -501,11 +622,11 @@ export default function SettingsPage() {
                 <div className="p-4 rounded-lg bg-error/10 border border-error/20">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h4 className="font-medium text-error">Удалить аккаунт</h4>
-                      <p className="text-xs text-error/80">Необратимое удаление всех данных</p>
+                      <h4 className="font-medium text-error">{t('settings.deleteAccount')}</h4>
+                      <p className="text-xs text-error/80">{t('settings.deleteAccountDesc')}</p>
                     </div>
                     <Button variant="secondary" size="sm" className="text-error border-error/30 hover:bg-error/10">
-                      Удалить
+                      {t('common.delete')}
                     </Button>
                   </div>
                 </div>

@@ -13,13 +13,21 @@ from schemas import (
     ResumeCreateSchema, ResumeResponse, JobCreateSchema, JobResponse,
     ApplicationCreateSchema, ApplicationSchema,
 )
-from auth import get_current_user
+from auth import get_current_user, get_optional_user, require_verified_email
 
 router = APIRouter(prefix="/api", tags=["Jobs"])
 
 
 class ApplicationStatusUpdate(BaseModel):
     status: str
+
+
+def _normalize_skills(skills) -> list:
+    if isinstance(skills, str):
+        return [s.strip() for s in skills.split(",") if s.strip()]
+    if isinstance(skills, list):
+        return [str(s).strip() for s in skills if str(s).strip()]
+    return []
 
 
 async def _get_student_profile(user: User, db: AsyncSession) -> StudentProfile:
@@ -149,12 +157,16 @@ async def _serialize_job(job: Job, db: AsyncSession, applications_count: int = 0
         "experience_required": job.experience_required,
         "is_active": job.is_active,
         "image": job.image,
+        "image_url": job.image or None,
         "location_lat": job.location_lat,
         "location_lng": job.location_lng,
         "location_address": job.location_address,
+        "has_location": job.location_lat is not None and job.location_lng is not None,
+        "is_favorited": False,
         "source": job.source,
         "source_url": job.source_url,
         "source_id": job.source_id,
+        "views_count": job.views_count or 0,
         "created_at": job.created_at.isoformat() if job.created_at else None,
         "applications_count": applications_count,
         "category": category,
@@ -202,7 +214,7 @@ async def _serialize_application(app: Application, db: AsyncSession) -> dict:
 
 @router.get("/resumes/")
 async def list_resumes(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if user.role == "student":
@@ -220,7 +232,7 @@ async def list_resumes(
 @router.get("/resumes/{resume_id}/")
 async def get_resume(
     resume_id: int,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(Resume).where(Resume.id == resume_id))
@@ -233,7 +245,7 @@ async def get_resume(
 @router.post("/resumes/")
 async def create_resume(
     data: ResumeCreateSchema,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if user.role != "student":
@@ -245,7 +257,7 @@ async def create_resume(
         student_id=profile.id,
         title=data.title,
         about=data.about or "",
-        skills=data.skills if data.skills else [],
+        skills=_normalize_skills(data.skills),
         schedule_type=data.schedule_type or "flexible",
         work_format=data.work_format or "online",
         github_url=data.github_url or "",
@@ -259,11 +271,11 @@ async def create_resume(
     return await _serialize_resume(resume, db)
 
 
-@router.put("/resumes/{resume_id}/")
+@router.api_route("/resumes/{resume_id}/", methods=["PUT", "PATCH"])
 async def update_resume(
     resume_id: int,
     data: ResumeCreateSchema,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if user.role != "student":
@@ -280,7 +292,7 @@ async def update_resume(
 
     resume.title = data.title
     resume.about = data.about or ""
-    resume.skills = data.skills if data.skills else []
+    resume.skills = _normalize_skills(data.skills)
     resume.schedule_type = data.schedule_type or "flexible"
     resume.work_format = data.work_format or "online"
     resume.github_url = data.github_url or ""
@@ -296,7 +308,7 @@ async def update_resume(
 @router.delete("/resumes/{resume_id}/")
 async def delete_resume(
     resume_id: int,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if user.role != "student":
@@ -321,7 +333,7 @@ async def delete_resume(
 
 @router.get("/jobs/mine/")
 async def list_my_jobs(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if user.role != "employer":
@@ -353,8 +365,9 @@ async def list_jobs(
     min_age: Optional[int] = Query(None),
     search: Optional[str] = Query(None),
     ordering: Optional[str] = Query(None),
+    employer: Optional[int] = Query(None),
     page: int = Query(1, ge=1),
-    user: Optional[User] = Depends(get_current_user),
+    user: Optional[User] = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
 ):
     is_employer = user and user.role == "employer"
@@ -367,25 +380,29 @@ async def list_jobs(
         if emp_profile:
             employer_profile_id = emp_profile.id
 
-    if is_employer and employer_profile_id:
-        query = select(Job).where(
-            (Job.is_active == True) | (Job.employer_id == employer_profile_id)
-        )
+    if employer is not None:
+        base_where = (Job.employer_id == employer) & (Job.is_active == True)
+    elif is_employer and employer_profile_id:
+        base_where = (Job.is_active == True) | (Job.employer_id == employer_profile_id)
     else:
-        query = select(Job).where(Job.is_active == True)
+        base_where = Job.is_active == True
 
+    conditions = [base_where]
+    join_category = False
     if category:
-        query = query.join(Category, Job.category_id == Category.id, isouter=True).where(
-            Category.slug == category
-        )
+        if category.isdigit():
+            conditions.append(Job.category_id == int(category))
+        else:
+            join_category = True
+            conditions.append(Category.slug == category)
     if schedule:
-        query = query.where(Job.schedule == schedule)
+        conditions.append(Job.schedule == schedule)
     if work_format:
-        query = query.where(Job.work_format == work_format)
+        conditions.append(Job.work_format == work_format)
     if min_age is not None:
-        query = query.where(Job.min_age <= min_age)
+        conditions.append(Job.min_age <= min_age)
     if search:
-        query = query.where(
+        conditions.append(
             Job.title.ilike(f"%{search}%") | Job.description.ilike(f"%{search}%")
         )
 
@@ -395,20 +412,25 @@ async def list_jobs(
         .subquery()
     )
 
-    query = query.outerjoin(app_count, Job.id == app_count.c.job_id)
+    query = (
+        select(Job, func.coalesce(app_count.c.cnt, 0).label("applications_count"))
+        .outerjoin(app_count, Job.id == app_count.c.job_id)
+        .where(*conditions)
+    )
+    if join_category:
+        query = query.join(Category, Job.category_id == Category.id, isouter=True)
 
     if ordering == "salary_max":
         query = query.order_by(Job.salary_max.desc().nullslast())
     elif ordering == "salary_min":
         query = query.order_by(Job.salary_min.desc().nullslast())
-    elif ordering == "created_at":
-        query = query.order_by(Job.created_at.desc())
     else:
         query = query.order_by(Job.created_at.desc())
 
-    count_q = select(func.count()).select_from(
-        select(Job).where(query.whereclause if query.whereclause else True).subquery()
-    )
+    count_q = select(func.count()).select_from(Job)
+    if join_category:
+        count_q = count_q.join(Category, Job.category_id == Category.id, isouter=True)
+    count_q = count_q.where(*conditions)
     total = (await db.execute(count_q)).scalar() or 0
 
     page_size = 10
@@ -419,14 +441,17 @@ async def list_jobs(
     return {
         "count": total,
         "page": page,
-        "results": [await _serialize_job(job, db, count) for job, count in rows],
+        "results": [
+            await _serialize_job(job, db, applications_count or 0)
+            for job, applications_count in rows
+        ],
     }
 
 
 @router.get("/jobs/{job_id}/")
 async def get_job(
     job_id: int,
-    user: Optional[User] = Depends(get_current_user),
+    user: Optional[User] = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(Job).where(Job.id == job_id))
@@ -442,10 +467,104 @@ async def get_job(
     return await _serialize_job(job, db, applications_count)
 
 
+@router.post("/jobs/{job_id}/view/")
+async def track_job_view(
+    job_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user),
+):
+    result = await db.execute(select(Job).where(Job.id == job_id))
+    job = result.scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    is_owner = False
+    if user:
+        emp = await db.execute(
+            select(EmployerProfile).where(EmployerProfile.user_id == user.id)
+        )
+        emp_profile = emp.scalar_one_or_none()
+        is_owner = emp_profile is not None and emp_profile.id == job.employer_id
+
+    if not is_owner:
+        job.views_count = (job.views_count or 0) + 1
+        await db.commit()
+        await db.refresh(job)
+
+    return {"views_count": job.views_count}
+
+
+@router.get("/jobs/stats/summary/")
+async def jobs_stats_summary(
+    user: User = Depends(require_verified_email),
+    db: AsyncSession = Depends(get_db),
+):
+    if user.role != "employer":
+        raise HTTPException(status_code=403, detail="Only employers can view job stats")
+
+    profile = await _get_employer_profile(user, db)
+
+    jobs_result = await db.execute(
+        select(func.count(Job.id), func.coalesce(func.sum(Job.views_count), 0))
+        .where(Job.employer_id == profile.id)
+    )
+    total_jobs, total_views = jobs_result.one()
+
+    active_result = await db.execute(
+        select(func.count(Job.id)).where(
+            Job.employer_id == profile.id, Job.is_active == True
+        )
+    )
+    active_jobs = active_result.scalar() or 0
+
+    app_result = await db.execute(
+        select(func.count(Application.id))
+        .join(Job, Application.job_id == Job.id)
+        .where(Job.employer_id == profile.id)
+    )
+    total_applications = app_result.scalar() or 0
+
+    by_status_result = await db.execute(
+        select(Application.status, func.count(Application.id))
+        .join(Job, Application.job_id == Job.id)
+        .where(Job.employer_id == profile.id)
+        .group_by(Application.status)
+    )
+    applications_by_status = {status_: cnt for status_, cnt in by_status_result.all()}
+
+    top_jobs_result = await db.execute(
+        select(Job)
+        .where(Job.employer_id == profile.id)
+        .order_by((Job.views_count or 0).desc())
+        .limit(5)
+    )
+    top_jobs = [
+        {
+            "id": j.id,
+            "title": j.title,
+            "views_count": j.views_count or 0,
+            "is_active": j.is_active,
+        }
+        for j in top_jobs_result.scalars().all()
+    ]
+
+    conversion = round((total_applications / total_views * 100), 2) if total_views else 0.0
+
+    return {
+        "total_jobs": total_jobs,
+        "active_jobs": active_jobs,
+        "total_views": total_views,
+        "total_applications": total_applications,
+        "applications_by_status": applications_by_status,
+        "view_to_apply_conversion_pct": conversion,
+        "top_jobs": top_jobs,
+    }
+
+
 @router.post("/jobs/")
 async def create_job(
     data: JobCreateSchema,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if user.role != "employer":
@@ -479,7 +598,7 @@ async def create_job(
 async def update_job(
     job_id: int,
     data: JobCreateSchema,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if user.role != "employer":
@@ -516,7 +635,7 @@ async def update_job(
 @router.delete("/jobs/{job_id}/")
 async def delete_job(
     job_id: int,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if user.role != "employer":
@@ -539,7 +658,7 @@ async def delete_job(
 @router.post("/jobs/{job_id}/toggle_active/")
 async def toggle_active(
     job_id: int,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if user.role != "employer":
@@ -565,7 +684,7 @@ async def toggle_active(
 
 @router.get("/applications/")
 async def list_applications(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if user.role == "student":
@@ -596,7 +715,7 @@ async def list_applications(
 @router.get("/applications/{application_id}/")
 async def get_application(
     application_id: int,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -631,7 +750,7 @@ async def get_application(
 @router.post("/applications/")
 async def create_application(
     data: ApplicationCreateSchema,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if user.role != "student":
@@ -668,14 +787,65 @@ async def create_application(
     db.add(app)
     await db.commit()
     await db.refresh(app)
-    return await _serialize_application(app, db)
+
+    serialized = await _serialize_application(app, db)
+
+    if job.employer_id:
+        emp_result = await db.execute(
+            select(EmployerProfile).where(EmployerProfile.id == job.employer_id)
+        )
+        employer = emp_result.scalar_one_or_none()
+        if employer:
+            notification = Notification(
+                user_id=employer.user_id,
+                notification_type="application_new",
+                title=f"Новый отклик: {job.title}",
+                message=f"Получен новый отклик на вакансию «{job.title}»",
+                link="/applications",
+            )
+            db.add(notification)
+            await db.commit()
+            await db.refresh(notification)
+
+            try:
+                from main import app as fastapi_app
+                ws = getattr(fastapi_app.state, "ws_manager", None)
+                if ws:
+                    await ws.send_to_user(
+                        employer.user_id,
+                        {
+                            "type": "application_new",
+                            "data": serialized,
+                        },
+                    )
+                    await ws.send_to_user(
+                        employer.user_id,
+                        {
+                            "type": "notification",
+                            "data": {
+                                "id": notification.id,
+                                "notification_type": notification.notification_type,
+                                "title": notification.title,
+                                "message": notification.message,
+                                "link": notification.link,
+                                "is_read": False,
+                                "created_at": notification.created_at.isoformat()
+                                if notification.created_at
+                                else None,
+                            },
+                        },
+                    )
+            except Exception:
+                pass
+
+    return serialized
 
 
 @router.post("/applications/{application_id}/update_status/")
 async def update_application_status(
     application_id: int,
     data: ApplicationStatusUpdate,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_email),
     db: AsyncSession = Depends(get_db),
 ):
     if user.role != "employer":
@@ -734,9 +904,9 @@ async def update_application_status(
 
             try:
                 from main import app as fastapi_app
-                ws_manager = getattr(fastapi_app.state, "ws_manager", None)
-                if ws_manager:
-                    await ws_manager.send_to_user(
+                ws = getattr(fastapi_app.state, "ws_manager", None)
+                if ws:
+                    await ws.send_to_user(
                         student.user_id,
                         {
                             "type": "notification",

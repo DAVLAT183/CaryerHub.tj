@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { Bot, X, Send, Loader2, Sparkles, MessageSquare, Minimize2, Maximize2 } from 'lucide-react';
+import { X, Send, Loader2, Sparkles, MessageSquare, Bot } from 'lucide-react';
 import api from '@/lib/api';
 import { showToast, getErrorMessage } from '@/lib/utils';
 import { clsx } from '@/lib/utils';
@@ -88,17 +88,30 @@ export default function MiniAIChat() {
   if (pathname === '/chat') return null;
 
   return (
-    <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[500]">
+    <div className="fixed bottom-5 right-5 z-[500]">
       {/* Chat Button */}
       {!isOpen && (
         <button
+          type="button"
           onClick={toggleChat}
-          className="btn-float w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-accent-primary text-white flex items-center justify-center transition-all duration-200 group"
+          className="group w-12 h-12 sm:w-14 sm:h-14 rounded-full text-white flex items-center justify-center bg-[linear-gradient(135deg,#1FA6F0_0%,#1580E8_100%)] shadow-[0_10px_28px_-6px_rgba(21,128,232,0.45),0_0_24px_rgba(31,166,240,0.25)] hover:shadow-[0_14px_34px_-6px_rgba(21,128,232,0.6),0_0_32px_rgba(31,166,240,0.4)] hover:scale-105 active:scale-95 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1FA6F0] focus-visible:ring-offset-2"
           aria-label="Открыть AI чат"
         >
-          <Bot size={20} className="group-hover:rotate-12 transition-transform duration-200 sm:hidden" />
-          <Bot size={24} className="group-hover:rotate-12 transition-transform duration-200 hidden sm:block" />
-          <span className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">1</span>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            className="w-5 h-5 sm:w-6 sm:h-6 drop-shadow-sm transition-transform duration-200 group-hover:-translate-y-0.5"
+          >
+            <path d="M8 4h8a4 4 0 0 1 4 4v6a4 4 0 0 1-4 4H8l-4 4V8a4 4 0 0 1 4-4z" />
+            <circle cx="8.4" cy="11" r="1.45" fill="currentColor" stroke="none" />
+            <circle cx="12" cy="11" r="1.45" fill="currentColor" stroke="none" />
+            <circle cx="15.6" cy="11" r="1.45" fill="currentColor" stroke="none" />
+          </svg>
         </button>
       )}
 
@@ -111,8 +124,7 @@ export default function MiniAIChat() {
           <div className="p-3 sm:p-4 border-b border-border-default bg-bg-secondary flex items-center justify-between">
             <div className="flex items-center gap-2 sm:gap-3">
               <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-accent-primary flex items-center justify-center">
-                <Bot size={16} className="text-white sm:hidden" />
-                <Bot size={18} className="text-white hidden sm:block" />
+                <img src="/robot-avatar.svg" alt="AI" className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
               <div>
                 <h3 className="font-heading font-semibold text-xs sm:text-sm">AI Карьерный консультант</h3>
@@ -143,8 +155,7 @@ export default function MiniAIChat() {
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center px-4">
                 <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-accent-primary/10 flex items-center justify-center mb-3 sm:mb-4">
-                  <Bot size={24} className="text-accent-primary sm:hidden" />
-                  <Bot size={28} className="text-accent-primary hidden sm:block" />
+                  <img src="/robot-avatar.svg" alt="AI" className="w-7 h-7 sm:w-8 sm:h-8" />
                 </div>
                 <h3 className="font-heading font-semibold text-base sm:text-lg mb-2">Привет! Я AI-ассистент</h3>
                 <p className="text-xs sm:text-sm text-text-muted max-w-md mb-4">

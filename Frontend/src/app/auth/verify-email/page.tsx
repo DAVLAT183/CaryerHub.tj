@@ -1,52 +1,123 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useState, useEffect, useRef } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { CheckCircle, XCircle, Loader2, Mail } from 'lucide-react';
-import api from '@/lib/api';
+import api, { setEmailVerified } from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 
 export default function VerifyEmailPage() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
-  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const emailParam = searchParams.get('email');
+  const from = searchParams.get('from') || '/jobs';
+  const router = useRouter();
+  const { user, logout, loading: authLoading } = useAuth();
+  const [status, setStatus] = useState<'loading' | 'success' | 'error' | 'idle'>('loading');
   const [message, setMessage] = useState('');
   const [email, setEmail] = useState('');
   const [resendLoading, setResendLoading] = useState(false);
   const [resendSuccess, setResendSuccess] = useState(false);
+  const [code, setCode] = useState('');
+  const [codeLoading, setCodeLoading] = useState(false);
+  const [codeError, setCodeError] = useState('');
+  const [devCode, setDevCode] = useState('');
+
+  useEffect(() => {
+    if (emailParam) setEmail(emailParam);
+    else if (user?.email) setEmail(user.email);
+  }, [emailParam, user]);
 
   useEffect(() => {
     if (token) {
       verifyToken(token);
-    } else {
-      setStatus('error');
-      setMessage('Токен верификации не найден');
+      return;
     }
+
+    const checkStatus = async () => {
+      if (!localStorage.getItem('access_token')) {
+        setStatus('idle');
+        return;
+      }
+      try {
+        const res = await api.get('/auth/check-verification/');
+        if (res.data.is_email_verified) {
+          setEmailVerified(true);
+          router.replace(from);
+        } else {
+          setStatus('idle');
+        }
+      } catch {
+        setStatus('idle');
+      }
+    };
+    checkStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   const verifyToken = async (t: string) => {
     try {
       const res = await api.get(`/auth/verify-email/?token=${t}`);
+      setEmailVerified(true);
       setStatus('success');
       setMessage(res.data.detail);
     } catch (err: any) {
       setStatus('error');
-      setMessage(err.response?.data?.detail || 'Ошибка верификации');
+      setMessage(err.response?.data?.detail?.message || err.response?.data?.detail || 'Ошибка верификации');
     }
   };
 
   const resendVerification = async () => {
-    if (!email) return;
+    if (!email && !user) return;
     setResendLoading(true);
+    setResendSuccess(false);
     try {
-      await api.post('/auth/send-verification/', { email });
+      const res = await api.post('/auth/send-verification/', email ? { email } : {});
       setResendSuccess(true);
+      if (res.data?.dev_code) setDevCode(res.data.dev_code);
     } catch (err: any) {
       setMessage(err.response?.data?.detail || 'Ошибка отправки');
     } finally {
       setResendLoading(false);
+    }
+  };
+
+  const autoSentRef = useRef(false);
+  useEffect(() => {
+    if (token || authLoading || !user || autoSentRef.current) return;
+    autoSentRef.current = true;
+    void resendVerification();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, authLoading, user]);
+
+  const submitCode = async (value?: string) => {
+    const nextCode = (value ?? code).trim();
+    if (nextCode.length !== 6 || codeLoading) return;
+    setCodeLoading(true);
+    setCodeError('');
+    try {
+      await api.post('/auth/verify-code/', { code: nextCode });
+      setEmailVerified(true);
+      router.replace(from);
+    } catch (err: any) {
+      setCodeError(
+        err.response?.data?.detail?.message ||
+          err.response?.data?.detail ||
+          'Ошибка проверки кода'
+      );
+      setCodeLoading(false);
+    }
+  };
+
+  const onCodeChange = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, 6);
+    setCode(digits);
+    setCodeError('');
+    if (digits.length === 6) {
+      void submitCode(digits);
     }
   };
 
@@ -67,9 +138,7 @@ export default function VerifyEmailPage() {
               <CheckCircle size={48} className="text-green-500 mx-auto mb-4" />
               <h2 className="font-heading font-bold text-xl mb-2">Email верифицирован!</h2>
               <p className="text-muted text-sm mb-6">{message}</p>
-              <Link href="/auth/login">
-                <Button>Войти в аккаунт</Button>
-              </Link>
+              <Button onClick={() => router.replace(from)}>Перейти в приложение</Button>
             </>
           )}
 
@@ -92,40 +161,92 @@ export default function VerifyEmailPage() {
     <div className="min-h-[60vh] flex items-center justify-center px-6">
       <Card className="max-w-md w-full text-center">
         <Mail size={48} className="text-accent mx-auto mb-4" />
-        <h2 className="font-heading font-bold text-xl mb-2">Верификация email</h2>
-        <p className="text-muted text-sm mb-6">
-          Введите email для повторной отправки письма
-        </p>
+        <h2 className="font-heading font-bold text-xl mb-2">Проверьте почту</h2>
 
-        {resendSuccess ? (
-          <div className="p-4 glass rounded-lg">
-            <CheckCircle size={24} className="text-green-500 mx-auto mb-2" />
-            <p className="text-sm text-soft">Письмо отправлено! Проверьте почту.</p>
+        {authLoading ? (
+          <div className="py-8">
+            <Loader2 size={32} className="text-accent mx-auto animate-spin" />
           </div>
+        ) : !user ? (
+          <>
+            <p className="text-muted text-sm mb-6">
+              Войдите в аккаунт, чтобы ввести код подтверждения.
+            </p>
+            <Link href="/auth/login">
+              <Button className="w-full">Войти</Button>
+            </Link>
+          </>
         ) : (
-          <div className="space-y-4">
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="your@email.com"
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-muted focus:outline-none focus:border-accent/50"
-            />
-            <Button
-              onClick={resendVerification}
-              loading={resendLoading}
-              disabled={!email}
-              className="w-full"
-            >
-              Отправить письмо
-            </Button>
-          </div>
+          <>
+            <p className="text-muted text-sm mb-6">
+              Мы отправили 6-значный код на{' '}
+              <span className="text-text-primary font-medium">{email || user.email}</span>.
+              Введите его ниже.
+            </p>
+
+            <div className="space-y-4">
+              <input
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                value={code}
+                onChange={(e) => onCodeChange(e.target.value)}
+                placeholder="000000"
+                aria-label="Код подтверждения"
+                className="input w-full text-center text-2xl font-semibold tracking-[0.4em]"
+              />
+
+              {codeError && <p className="text-sm text-red-500">{codeError}</p>}
+
+              <Button
+                onClick={() => submitCode()}
+                loading={codeLoading}
+                disabled={code.length !== 6}
+                className="w-full"
+              >
+                Подтвердить
+              </Button>
+
+              <Button
+                onClick={resendVerification}
+                loading={resendLoading}
+                variant="secondary"
+                className="w-full"
+              >
+                Отправить код повторно
+              </Button>
+
+              {resendSuccess && (
+                <p className="text-sm text-green-500">Письмо отправлено! Проверьте почту.</p>
+              )}
+              {devCode && (
+                <p className="text-sm text-amber-400">
+                  SMTP не настроен — код подтверждения:{' '}
+                  <span className="font-mono font-bold tracking-[0.2em]">{devCode}</span>
+                </p>
+              )}
+              {!resendSuccess && message && <p className="text-sm text-red-500">{message}</p>}
+              <p className="text-xs text-muted">
+                Не пришло письмо? Проверьте папку «Спам» или отправьте код повторно.
+              </p>
+            </div>
+          </>
         )}
 
-        <div className="mt-6 pt-4 border-t border-white/[0.04]">
-          <Link href="/auth/login" className="text-sm text-muted hover:text-white transition-colors">
-            Вернуться к входу
-          </Link>
+        <div className="mt-6 pt-4 border-t border-border-default flex items-center justify-center gap-4">
+          {user ? (
+            <button
+              type="button"
+              onClick={logout}
+              className="text-sm text-muted hover:text-text-primary transition-colors"
+            >
+              Выйти из аккаунта
+            </button>
+          ) : (
+            <Link href="/auth/login" className="text-sm text-muted hover:text-text-primary transition-colors">
+              Вернуться к входу
+            </Link>
+          )}
         </div>
       </Card>
     </div>

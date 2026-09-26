@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 
 # ──────────────────────────── Auth ────────────────────────────
@@ -176,10 +176,9 @@ class ResumeSchema(BaseModel):
 class ResumeCreateSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
     title: str
     about: Optional[str] = None
-    skills: Optional[str] = None
+    skills: Optional[Union[str, list[str]]] = None
     schedule_type: Optional[str] = None
     work_format: Optional[str] = None
     github_url: Optional[str] = None
@@ -236,6 +235,7 @@ class JobSchema(BaseModel):
     source: Optional[str] = None
     source_url: Optional[str] = None
     source_id: Optional[str] = None
+    views_count: int = 0
 
 
 class JobCreateSchema(BaseModel):
@@ -436,6 +436,11 @@ class UserUpdateRequest(BaseModel):
     location: Optional[str] = None
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
 # ──────────────────────────── Profile Create/Update ────────────────────────────
 
 
@@ -459,6 +464,7 @@ class StudentProfileResponse(BaseModel):
     birth_date: Optional[str] = None
     age: Optional[int] = None
     city: Optional[str] = None
+    views_count: int = 0
 
 
 class EmployerProfileCreate(BaseModel):
@@ -478,6 +484,7 @@ class EmployerProfileResponse(BaseModel):
     website: Optional[str] = None
     address: Optional[str] = None
     is_verified: bool = False
+    views_count: int = 0
 
 
 # ──────────────────────────── Category ────────────────────────────
@@ -553,6 +560,26 @@ class NotificationResponse(BaseModel):
     created_at: Optional[datetime] = None
 
 
+class NotificationPreferenceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    email_jobs: bool = True
+    email_applications: bool = True
+    email_messages: bool = True
+    push_jobs: bool = False
+    push_messages: bool = False
+    updated_at: Optional[datetime] = None
+
+
+class NotificationPreferenceUpdate(BaseModel):
+    email_jobs: Optional[bool] = None
+    email_applications: Optional[bool] = None
+    email_messages: Optional[bool] = None
+    push_jobs: Optional[bool] = None
+    push_messages: Optional[bool] = None
+
+
 # ──────────────────────────── Chat ────────────────────────────
 
 
@@ -562,7 +589,16 @@ class ChatSessionCreate(BaseModel):
 
 class ChatMessageCreate(BaseModel):
     session_id: Optional[int] = None
-    content: str
+    content: Optional[str] = None
+    message: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _normalize(self) -> "ChatMessageCreate":
+        if not self.content and not self.message:
+            raise ValueError("message or content is required")
+        if not self.content:
+            self.content = self.message
+        return self
 
 
 class ChatMessageResponse(BaseModel):
@@ -575,6 +611,24 @@ class ChatMessageResponse(BaseModel):
     created_at: Optional[datetime] = None
 
 
+class ChatSendResponse(BaseModel):
+    session_id: int
+    session_title: Optional[str] = None
+    user_message: ChatMessageResponse
+    assistant_message: ChatMessageResponse
+
+
+class ChatMessagesResponse(BaseModel):
+    id: int
+    session_id: int
+    title: Optional[str] = None
+    messages: list[ChatMessageResponse] = []
+    messages_count: int = 0
+    last_message: Optional[dict[str, Any]] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
 class ChatSessionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -582,7 +636,7 @@ class ChatSessionResponse(BaseModel):
     title: Optional[str] = None
     messages: list[ChatMessageResponse] = []
     messages_count: int = 0
-    last_message: Optional[str] = None
+    last_message: Optional[dict[str, Any]] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

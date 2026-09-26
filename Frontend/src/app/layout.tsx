@@ -6,6 +6,8 @@ import { ThemeProvider } from '@/i18n/ThemeContext';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import MiniAIChat from '@/components/chat/MiniAIChat';
+import BackToTop from '@/components/ui/BackToTop';
+import KeyboardShortcuts from '@/components/ui/KeyboardShortcuts';
 import './globals.css';
 
 const inter = Inter({
@@ -25,6 +27,9 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: 'CareerHub // Современная платформа поиска работы',
   description: 'Найди работу или стажировку мечты. Премиальный интерфейс, умные фильтры, лучшие компании.',
+  icons: {
+    icon: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -40,6 +45,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </main>
               <Footer />
               <MiniAIChat />
+              <BackToTop />
+              <KeyboardShortcuts />
             </AuthProvider>
           </I18nProvider>
         </ThemeProvider>

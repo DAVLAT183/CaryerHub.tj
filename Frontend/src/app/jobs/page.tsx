@@ -7,7 +7,9 @@ import { useAuth } from '@/hooks/useAuth';
 import JobFilters from '@/components/jobs/JobFilters';
 import JobCard from '@/components/jobs/JobCard';
 import Card from '@/components/ui/Card';
-import { showToast, getErrorMessage } from '@/lib/utils';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import { showToast, getErrorMessage, formatVacancyWord, getApplicationJobId } from '@/lib/utils';
+import { useI18n } from '@/i18n/I18nContext';
 import type { Job, PaginatedResponse } from '@/types';
 
 interface Filters {
@@ -32,10 +34,10 @@ const initialFilters: Filters = {
 
 export default function JobsPage() {
   const { user } = useAuth();
+  const { t } = useI18n();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [count, setCount] = useState(0);
-  const [page, setPage] = useState(1);
   const [favorites, setFavorites] = useState<number[]>([]);
   const [appliedJobs, setAppliedJobs] = useState<number[]>([]);
   const [filters, setFilters] = useState<Filters>(initialFilters);
@@ -80,7 +82,11 @@ export default function JobsPage() {
       api.get('/applications/').then((res) => {
         const data = res.data;
         const list = data.results || data;
-        setAppliedJobs(list.map((a: { job: number }) => a.job));
+        setAppliedJobs(
+          list
+            .map((a: { job: unknown }) => getApplicationJobId(a.job))
+            .filter((id: number | null): id is number => id !== null)
+        );
       }).catch(() => {});
     }
   }, [user]);
@@ -90,11 +96,11 @@ export default function JobsPage() {
       if (favorites.includes(jobId)) {
         await api.delete(`/favorites/${jobId}/remove/`);
         setFavorites((prev) => prev.filter((id) => id !== jobId));
-        showToast('Удалено из избранного', 'info');
+        showToast(t('notifications.removedFromFavorites'), 'info');
       } else {
         await api.post('/favorites/add/', { job_id: jobId });
         setFavorites((prev) => [...prev, jobId]);
-        showToast('Добавлено в избранное', 'success');
+        showToast(t('notifications.addedToFavorites'), 'success');
       }
     } catch (err) {
       showToast(getErrorMessage(err), 'error');
@@ -112,33 +118,30 @@ export default function JobsPage() {
   const hasActiveFilters = filters.category || filters.schedule || filters.work_format || filters.experience || filters.no_experience;
 
   const totalPages = Math.ceil(count / 10);
+  const page = filters.page;
 
   const paginationNumbers = Array.from({ length: totalPages }, (_, i) => i + 1).slice(
     Math.max(0, page - 2),
     Math.min(totalPages, page + 2)
   );
 
-  const getVacancyWord = (count: number): string => {
-    const lastTwo = count % 100;
-    const lastOne = count % 10;
-    if (lastTwo >= 11 && lastTwo <= 19) return 'вакансий';
-    if (lastOne === 1) return 'вакансия';
-    if (lastOne >= 2 && lastOne <= 4) return 'вакансии';
-    return 'вакансий';
+  const goToPage = (p: number) => {
+    setFilters((prev) => ({ ...prev, page: Math.min(Math.max(1, p), Math.max(1, totalPages)) }));
   };
 
   return (
     <div className="min-h-screen bg-bg-primary">
       <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        <Breadcrumbs items={[{ label: t('nav.jobs') }]} className="mb-3" />
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
               <h1 className="font-heading text-[28px] font-bold text-text-primary tracking-tight">
-                Вакансии
+                {t('nav.jobs')}
               </h1>
               <p className="text-[14px] text-text-muted mt-1">
-                {count} {getVacancyWord(count)} найдено
+                {t('jobs.foundCount', { count, word: formatVacancyWord(count) })}
               </p>
             </div>
             <button
@@ -146,7 +149,7 @@ export default function JobsPage() {
               className="lg:hidden flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border-default bg-surface-card text-text-secondary hover:bg-surface-hover transition-colors text-[13px] font-medium"
             >
               <Filter size={16} />
-              Фильтры
+              {t('jobs.filters')}
               {hasActiveFilters && (
                 <span className="w-5 h-5 text-[10px] font-semibold bg-accent-primary text-white rounded-full flex items-center justify-center">
                   {Object.values(filters).filter(v => v).length - 1}
@@ -174,14 +177,14 @@ export default function JobsPage() {
                   type="text"
                   value={filters.search}
                   onChange={(e) => handleSearchChange(e.target.value)}
-                  placeholder="Поиск по названию, компании, навыкам..."
-                  aria-label="Поиск вакансий"
+                  placeholder={t('jobs.searchPlaceholderFull')}
+                  aria-label={t('jobs.searchLabel')}
                 />
                 {filters.search && (
                   <button
                     onClick={() => handleSearchChange('')}
                     className="absolute right-4 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-text-subtle hover:text-text-primary hover:bg-surface-hover transition-colors"
-                    aria-label="Очистить поиск"
+                    aria-label={t('jobs.clearSearch')}
                   >
                     <X size={16} />
                   </button>
@@ -191,9 +194,9 @@ export default function JobsPage() {
 
             {/* Loading State */}
             {loading ? (
-              <div className="grid gap-4 grid-cols-1 lg:grid-cols-2" role="status" aria-label="Загрузка вакансий">
+              <div className="grid gap-4 grid-cols-1 lg:grid-cols-2 auto-rows-fr" role="status" aria-label={t('jobs.loading')}>
                 {[...Array(6)].map((_, i) => (
-                  <div key={i} className="card-minimal p-5 animate-pulse">
+                  <div key={i} className="card-minimal h-[300px] p-5 animate-pulse">
                     <div className="flex gap-4">
                       <div className="w-11 h-11 rounded-xl bg-surface-hover flex-shrink-0" />
                       <div className="flex-1 space-y-3">
@@ -215,23 +218,23 @@ export default function JobsPage() {
                   <Search size={28} className="text-text-subtle" />
                 </div>
                 <h3 className="font-heading text-[17px] font-semibold text-text-primary mb-2">
-                  Вакансии не найдены
+                  {t('jobs.noJobs')}
                 </h3>
                 <p className="text-[13px] text-text-muted mb-6 max-w-sm mx-auto">
-                  Попробуйте изменить фильтры или поисковый запрос
+                  {t('jobs.noJobsDescriptionFull')}
                 </p>
                 <button
                   onClick={() => setFilters(initialFilters)}
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-medium text-text-muted hover:text-text-primary hover:bg-surface-hover transition-colors"
                 >
                   <X size={14} />
-                  Сбросить фильтры
+                  {t('jobs.resetFilters')}
                 </button>
               </div>
             ) : (
               <>
                 {/* Job Grid - 2 columns */}
-                <div className="grid gap-4 grid-cols-1 lg:grid-cols-2" role="list" aria-label="Список вакансий">
+                <div className="grid gap-4 grid-cols-1 lg:grid-cols-2 auto-rows-fr" role="list" aria-label={t('jobs.listLabel')}>
                   {jobs.map((job) => (
                     <JobCard
                       key={job.id}
@@ -245,12 +248,12 @@ export default function JobsPage() {
 
                 {/* Pagination */}
                 {totalPages > 1 && (
-                  <nav className="flex items-center justify-center gap-2 mt-10" aria-label="Пагинация">
+                  <nav className="flex items-center justify-center gap-2 mt-10" aria-label={t('jobs.pagination')}>
                     <button
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      onClick={() => goToPage(page - 1)}
                       disabled={page === 1}
                       className="w-10 h-10 rounded-xl border border-border-default bg-surface-card text-text-muted hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
-                      aria-label="Предыдущая страница"
+                      aria-label={t('jobs.prevPage')}
                     >
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M15 18l-6-6 6-6" />
@@ -259,9 +262,9 @@ export default function JobsPage() {
                     {page > 3 && (
                       <>
                         <button
-                          onClick={() => setPage(1)}
+                          onClick={() => goToPage(1)}
                           className={`w-10 h-10 rounded-xl flex items-center justify-center text-[13px] font-medium transition-colors ${page === 1 ? 'bg-accent-primary text-white' : 'border border-border-default bg-surface-card text-text-muted hover:bg-surface-hover'}`}
-                          aria-label="Страница 1"
+                          aria-label={t('jobs.pageN', { n: 1 })}
                         >
                           1
                         </button>
@@ -271,9 +274,9 @@ export default function JobsPage() {
                     {paginationNumbers.map((p) => (
                       <button
                         key={p}
-                        onClick={() => setPage(p)}
+                        onClick={() => goToPage(p)}
                         className={`w-10 h-10 rounded-xl flex items-center justify-center text-[13px] font-medium transition-colors ${page === p ? 'bg-accent-primary text-white' : 'border border-border-default bg-surface-card text-text-muted hover:bg-surface-hover'}`}
-                        aria-label={`Страница ${p}`}
+                        aria-label={t('jobs.pageN', { n: p })}
                         aria-current={page === p ? 'page' : undefined}
                       >
                         {p}
@@ -283,19 +286,19 @@ export default function JobsPage() {
                       <>
                         {page < totalPages - 3 && <span className="w-10 h-10 flex items-center justify-center text-text-muted text-[13px]">...</span>}
                         <button
-                          onClick={() => setPage(totalPages)}
+                          onClick={() => goToPage(totalPages)}
                           className={`w-10 h-10 rounded-xl flex items-center justify-center text-[13px] font-medium transition-colors ${page === totalPages ? 'bg-accent-primary text-white' : 'border border-border-default bg-surface-card text-text-muted hover:bg-surface-hover'}`}
-                          aria-label={`Страница ${totalPages}`}
+                          aria-label={t('jobs.pageN', { n: totalPages })}
                         >
                           {totalPages}
                         </button>
                       </>
                     )}
                     <button
-                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      onClick={() => goToPage(page + 1)}
                       disabled={page === totalPages}
                       className="w-10 h-10 rounded-xl border border-border-default bg-surface-card text-text-muted hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
-                      aria-label="Следующая страница"
+                      aria-label={t('jobs.nextPage')}
                     >
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M9 18l6-6-6-6" />
@@ -317,7 +320,7 @@ export default function JobsPage() {
             <div className="flex items-center justify-between mb-6 sticky top-0 bg-bg-primary/90 backdrop-blur-sm pb-4 border-b border-border-default z-10">
               <div className="flex items-center gap-2.5">
                 <Filter size={16} className="text-accent-primary" />
-                <h2 className="font-heading text-[17px] font-semibold text-text-primary">Фильтры</h2>
+                <h2 className="font-heading text-[17px] font-semibold text-text-primary">{t('jobs.filters')}</h2>
                 {hasActiveFilters && (
                   <span className="px-2 py-0.5 text-[10px] font-semibold text-accent-primary bg-accent-primary/10 rounded-lg">
                     {Object.values(filters).filter(v => v).length - 1}

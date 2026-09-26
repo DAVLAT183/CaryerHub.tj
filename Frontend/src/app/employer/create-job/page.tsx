@@ -10,6 +10,7 @@ import Textarea from '@/components/ui/Textarea';
 import Select from '@/components/ui/Select';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import { showToast, getErrorMessage } from '@/lib/utils';
 import type { Category } from '@/types';
 
@@ -62,6 +63,13 @@ export default function CreateJobPage() {
 
   return (
     <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <Breadcrumbs
+        items={[
+          { label: 'Профиль', href: '/profile/employer' },
+          { label: 'Создать вакансию' },
+        ]}
+        className="mb-3"
+      />
       <Link href="/jobs" className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-white transition-colors mb-6">
         <ArrowLeft size={14} />
         Ко всем вакансиям
@@ -99,14 +107,14 @@ export default function CreateJobPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <Input
-                  label="Зарплата от (₽)"
+                  label="Зарплата от (см)"
                   type="number"
                   placeholder="30000"
                   value={form.salary_min}
                   onChange={(e) => update('salary_min', e.target.value)}
                 />
                 <Input
-                  label="Зарплата до (₽)"
+                  label="Зарплата до (см)"
                   type="number"
                   placeholder="50000"
                   value={form.salary_max}
@@ -181,10 +189,10 @@ export default function CreateJobPage() {
               {(form.salary_min || form.salary_max) && (
                 <p className="text-xs text-accent mb-2">
                   {form.salary_min && form.salary_max
-                    ? `${Number(form.salary_min).toLocaleString()} – ${Number(form.salary_max).toLocaleString()} ₽`
+                    ? `${Number(form.salary_min).toLocaleString()} – ${Number(form.salary_max).toLocaleString()} см`
                     : form.salary_min
-                    ? `от ${Number(form.salary_min).toLocaleString()} ₽`
-                    : `до ${Number(form.salary_max).toLocaleString()} ₽`
+                    ? `от ${Number(form.salary_min).toLocaleString()} см`
+                    : `до ${Number(form.salary_max).toLocaleString()} см`
                   }
                 </p>
               )}

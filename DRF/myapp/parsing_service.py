@@ -1,6 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin
+from urllib.parse import urljoin, quote
 import time
 import re
 import json
@@ -10,6 +10,20 @@ from django.contrib.auth import get_user_model
 from .models import Job, Category, EmployerProfile
 
 User = get_user_model()
+
+CITY_COORDS = {
+    'душанбе': (38.5598, 68.7870),
+    'худжанд': (40.2824, 69.6196),
+    'хорог': (37.4880, 71.5520),
+    'кулоб': (37.9410, 69.6240),
+    'курган-тюбе': (37.8340, 69.2840),
+    'бустон': (40.2330, 69.6970),
+    'турсунзаде': (37.9360, 67.2640),
+    'ижхаб': (40.2140, 69.3570),
+    'фархор': (37.5560, 69.4060),
+    'гиссар': (38.5470, 68.5520),
+    'варзоб': (38.5740, 68.8500),
+}
 
 
 class SomonTjParser:
@@ -48,6 +62,70 @@ class SomonTjParser:
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
             'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
         })
+        self._geocode_cache = {}
+
+    def geocode(self, address):
+        if not address:
+            return None, None
+        key = address.lower().strip()
+        if key in self._geocode_cache:
+            return self._geocode_cache[key]
+
+        result = (None, None)
+        addr_lower = key
+        for city, coords in CITY_COORDS.items():
+            if city in addr_lower:
+                result = coords
+                break
+
+        if result == (None, None):
+            try:
+                url = f'https://nominatim.openstreetmap.org/search?q={quote(address)}&format=json&limit=1&countrycodes=tj,ru'
+                resp = self.session.get(url, headers={'User-Agent': 'CareerHub/1.0'}, timeout=10)
+                data = resp.json()
+                if data:
+                    result = (float(data[0]['lat']), float(data[0]['lon']))
+                time.sleep(1)
+            except Exception as e:
+                print(f"Geocode error for '{address}': {e}")
+
+        self._geocode_cache[key] = result
+        return result
+
+    @staticmethod
+    def _extract_geo(ld):
+        candidates = [
+            ld.get('jobLocation', {}).get('geo') if isinstance(ld.get('jobLocation'), dict) else None,
+            ld.get('jobLocation', {}).get('address', {}).get('geo')
+            if isinstance(ld.get('jobLocation'), dict) and isinstance(ld.get('jobLocation', {}).get('address'), dict)
+            else None,
+            ld.get('geo'),
+        ]
+        for geo in candidates:
+            if isinstance(geo, dict) and geo.get('latitude') is not None and geo.get('longitude') is not None:
+                try:
+                    return float(geo['latitude']), float(geo['longitude'])
+                except (TypeError, ValueError):
+                    continue
+        return None, None
+
+    @staticmethod
+    def _extract_geo_from_html(soup):
+        text = str(soup)
+        patterns = [
+            r'"lat"\s*:\s*(-?\d+\.\d+)\s*,\s*"lng"\s*:\s*(-?\d+\.\d+)',
+            r'"latitude"\s*:\s*(-?\d+\.\d+)\s*,\s*"longitude"\s*:\s*(-?\d+\.\d+)',
+            r'latitude=(-?\d+\.\d+).*?longitude=(-?\d+\.\d+)',
+            r'mapbox.*?/-?\d+\.\d+(-?\d+\.\d+)',
+        ]
+        for pat in patterns:
+            m = re.search(pat, text, re.IGNORECASE | re.DOTALL)
+            if m:
+                try:
+                    return float(m.group(1)), float(m.group(2))
+                except (TypeError, ValueError, IndexError):
+                    continue
+        return None, None
 
     def get_category(self, slug_or_name):
         slug_or_name = slug_or_name.lower().strip()
@@ -237,6 +315,8 @@ class SomonTjParser:
         work_format = self.parse_work_format(description)
         experience_required = any(w in description.lower() for w in ['опыт', 'стаж', 'experience'])
 
+        lat, lng = self._extract_geo(ld)
+
         return {
             'description': description,
             'salary_min': salary_min,
@@ -246,6 +326,8 @@ class SomonTjParser:
             'experience_required': experience_required,
             'location_address': location or job_data.get('location', ''),
             'company': company or job_data.get('company', ''),
+            'location_lat': lat,
+            'location_lng': lng,
         }
 
     def _parse_from_html(self, soup, job_data):
@@ -257,6 +339,8 @@ class SomonTjParser:
         work_format = self.parse_work_format(description)
         experience_required = any(w in description.lower() for w in ['опыт', 'стаж', 'experience'])
 
+        lat, lng = self._extract_geo_from_html(soup)
+
         return {
             'description': description,
             'salary_min': salary_min,
@@ -266,6 +350,8 @@ class SomonTjParser:
             'experience_required': experience_required,
             'location_address': job_data.get('location', ''),
             'company': job_data.get('company', ''),
+            'location_lat': lat,
+            'location_lng': lng,
         }
 
     def get_or_create_employer(self, company_name):
@@ -295,6 +381,12 @@ class SomonTjParser:
         category = self.get_category(detail_data.get('description', '') + ' ' + job_data.get('title', ''))
         employer = self.get_or_create_employer(detail_data.get('company', ''))
 
+        lat = detail_data.get('location_lat')
+        lng = detail_data.get('location_lng')
+        address = detail_data.get('location_address', '')
+        if lat is None or lng is None:
+            lat, lng = self.geocode(address)
+
         job, created = Job.objects.get_or_create(
             source='somon_tj',
             source_id=job_data['source_id'],
@@ -308,7 +400,9 @@ class SomonTjParser:
                 'schedule': detail_data.get('schedule', 'flexible'),
                 'work_format': detail_data.get('work_format', 'offline'),
                 'experience_required': detail_data.get('experience_required', False),
-                'location_address': detail_data.get('location_address', ''),
+                'location_address': address,
+                'location_lat': lat,
+                'location_lng': lng,
                 'source_url': job_data['source_url'],
                 'is_active': True,
             }
@@ -322,11 +416,32 @@ class SomonTjParser:
             job.schedule = detail_data.get('schedule', 'flexible')
             job.work_format = detail_data.get('work_format', 'offline')
             job.experience_required = detail_data.get('experience_required', False)
-            job.location_address = detail_data.get('location_address', '')
+            job.location_address = address
+            if lat is not None and lng is not None:
+                job.location_lat = lat
+                job.location_lng = lng
             job.is_active = True
             job.save()
 
         return job, created
+
+    def backfill_locations(self):
+        qs = Job.objects.filter(
+            location_address__isnull=False
+        ).exclude(location_address='').filter(
+            location_lat__isnull=True
+        )[:50]
+        updated = 0
+        for job in qs:
+            lat, lng = self.geocode(job.location_address)
+            if lat is not None and lng is not None:
+                job.location_lat = lat
+                job.location_lng = lng
+                job.save(update_fields=['location_lat', 'location_lng'])
+                updated += 1
+        if updated:
+            print(f"Backfilled coordinates for {updated} jobs")
+        return updated
 
     def parse_and_save(self, max_jobs=20):
         print(f"Starting parsing from somon.tj/vakansii/...")
@@ -360,6 +475,11 @@ class SomonTjParser:
             except Exception as e:
                 print(f"Error processing job: {e}")
                 results['errors'] += 1
+
+        try:
+            self.backfill_locations()
+        except Exception as e:
+            print(f"Backfill error: {e}")
 
         print(f"Parsing completed: {results}")
         return {'success': True, **results}

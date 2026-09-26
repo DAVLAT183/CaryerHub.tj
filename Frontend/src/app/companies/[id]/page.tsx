@@ -8,8 +8,9 @@ import api from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
 import Card from '@/components/ui/Card';
 import Skeleton from '@/components/ui/Skeleton';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import JobCard from '@/components/jobs/JobCard';
-import { showToast, getErrorMessage } from '@/lib/utils';
+import { showToast, getErrorMessage, getApplicationJobId, mediaUrl } from '@/lib/utils';
 import type { EmployerProfile, Job } from '@/types';
 
 export default function CompanyDetailPage() {
@@ -39,7 +40,11 @@ export default function CompanyDetailPage() {
       api.get('/applications/').then((res) => {
         const data = res.data;
         const list = data.results || data;
-        setAppliedJobs(list.map((a: { job: number }) => a.job));
+        setAppliedJobs(
+          list
+            .map((a: { job: unknown }) => getApplicationJobId(a.job))
+            .filter((id: number | null): id is number => id !== null)
+        );
       }).catch(() => {});
     }
   }, [user]);
@@ -74,13 +79,20 @@ export default function CompanyDetailPage() {
   return (
     <div className="min-h-screen bg-bg-primary">
       <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        <Breadcrumbs
+          items={[
+            { label: 'Компании', href: '/companies' },
+            { label: company.company_name || 'Компания' },
+          ]}
+          className="mb-3"
+        />
         <Card className="mb-6 sm:mb-8 animate-fade-in overflow-hidden">
           <div className="p-6 lg:p-8">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
               <div className="flex items-start gap-4">
                 <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-xl bg-surface-hover border border-border-default flex items-center justify-center flex-shrink-0">
                   {company.user?.avatar ? (
-                    <img src={company.user.avatar} alt={company.company_name} className="w-full h-full rounded-xl object-cover" />
+                    <img src={mediaUrl(company.user.avatar)} alt={company.company_name} className="w-full h-full rounded-xl object-cover" />
                   ) : (
                     <span className="font-heading text-display-sm text-accent-primary">
                       {company.company_name?.charAt(0) || '?'}

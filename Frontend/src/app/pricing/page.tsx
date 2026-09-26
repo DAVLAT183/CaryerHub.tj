@@ -5,6 +5,7 @@ import { Check, Sparkles, Zap, Crown, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import api from '@/lib/api';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
 const planIcons: Record<string, typeof Zap> = {
   free: Zap,
@@ -106,6 +107,7 @@ export default function PricingPage() {
 
   return (
     <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-8 sm:py-12">
+      <Breadcrumbs items={[{ label: 'Тарифы' }]} className="mb-3" />
       <div className="text-center mb-12">
         <h1 className="font-heading font-bold text-3xl md:text-4xl mb-3">Тарифы</h1>
         <p className="text-text-muted text-lg max-w-xl mx-auto">

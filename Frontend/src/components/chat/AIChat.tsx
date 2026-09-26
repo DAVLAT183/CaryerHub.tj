@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Send, Bot, User, Sparkles, Loader2, MessageSquare } from 'lucide-react';
+import { Send, User, Sparkles, Loader2, MessageSquare } from 'lucide-react';
 import api from '@/lib/api';
 import Button from '@/components/ui/Button';
 import { showToast, getErrorMessage } from '@/lib/utils';
@@ -184,8 +184,7 @@ export default function AIChat() {
               <MessageSquare size={18} className="text-[var(--color-text-muted)]" />
             </button>
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-accent-primary flex items-center justify-center flex-shrink-0">
-              <Bot size={16} className="text-white sm:hidden" />
-              <Bot size={18} className="text-white hidden sm:block" />
+              <img src="/robot-avatar.svg" alt="AI" className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div className="min-w-0">
               <h3 className="font-heading font-semibold text-sm">AI Карьерный консультант</h3>
@@ -198,8 +197,7 @@ export default function AIChat() {
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center px-4">
               <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-[var(--color-accent-primary)]/10 flex items-center justify-center mb-3 sm:mb-4">
-                <Bot size={24} className="text-[var(--color-accent-primary)] sm:hidden" />
-                <Bot size={28} className="text-[var(--color-accent-primary)] hidden sm:block" />
+                <img src="/robot-avatar.svg" alt="AI" className="w-7 h-7 sm:w-8 sm:h-8" />
               </div>
               <h3 className="font-heading font-semibold text-base sm:text-lg mb-2">Привет! Я AI-ассистент</h3>
               <p className="text-xs sm:text-sm text-[var(--color-text-muted)] max-w-md">
@@ -215,8 +213,7 @@ export default function AIChat() {
               >
                 {msg.role === 'assistant' && (
                   <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[var(--color-accent-primary)]/15 flex items-center justify-center flex-shrink-0">
-                    <Bot size={12} className="text-[var(--color-accent-primary)] sm:hidden" />
-                    <Bot size={14} className="text-[var(--color-accent-primary)] hidden sm:block" />
+                    <img src="/robot-avatar.svg" alt="AI" className="w-4 h-4" />
                   </div>
                 )}
                 <div
@@ -240,8 +237,7 @@ export default function AIChat() {
           {sending && (
             <div className="flex gap-2 sm:gap-3">
               <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[var(--color-accent-primary)]/15 flex items-center justify-center">
-                <Bot size={12} className="text-[var(--color-accent-primary)] sm:hidden" />
-                <Bot size={14} className="text-[var(--color-accent-primary)] hidden sm:block" />
+                <img src="/robot-avatar.svg" alt="AI" className="w-4 h-4" />
               </div>
               <div className="px-3 sm:px-4 py-2.5 sm:py-3 rounded-[14px] sm:rounded-[16px] bg-[var(--color-surface-card)] border border-[var(--color-border-default)]">
                 <Loader2 size={14} className="animate-spin text-[var(--color-accent-primary)] sm:hidden" />

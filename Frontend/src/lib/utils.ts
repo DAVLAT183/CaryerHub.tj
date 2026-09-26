@@ -1,3 +1,5 @@
+import { translate, getLocaleTag, getLocale } from '@/i18n/translate';
+
 export function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
   const now = new Date();
@@ -6,12 +8,12 @@ export function formatDate(dateStr: string): string {
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return 'только что';
-  if (diffMins < 60) return `${diffMins} мин. назад`;
-  if (diffHours < 24) return `${diffHours} ч. назад`;
-  if (diffDays < 7) return `${diffDays} дн. назад`;
+  if (diffMins < 1) return translate('time.justNow');
+  if (diffMins < 60) return translate('time.minutesAgo', { n: diffMins });
+  if (diffHours < 24) return translate('time.hoursAgo', { n: diffHours });
+  if (diffDays < 7) return translate('time.daysAgo', { n: diffDays });
 
-  return date.toLocaleDateString('ru-RU', {
+  return date.toLocaleDateString(getLocaleTag(), {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
@@ -19,49 +21,68 @@ export function formatDate(dateStr: string): string {
 }
 
 export function formatSalary(min: number | null, max: number | null): string {
-  if (!min && !max) return 'Зарплата не указана';
-  if (min && max) return `${min.toLocaleString('ru-RU')} – ${max.toLocaleString('ru-RU')} ₽`;
-  if (min) return `от ${min.toLocaleString('ru-RU')} ₽`;
-  return `до ${max!.toLocaleString('ru-RU')} ₽`;
+  if (!min && !max) return translate('salary.notSpecified');
+  const tag = getLocaleTag();
+  if (min && max) return `${min.toLocaleString(tag)} – ${max.toLocaleString(tag)} см`;
+  if (min) return translate('salary.from', { n: min.toLocaleString(tag) });
+  return translate('salary.to', { n: max!.toLocaleString(tag) });
 }
 
 export function formatSchedule(schedule: string): string {
-  const map: Record<string, string> = {
-    flexible: 'Гибкий',
-    part_time: '2-4 часа',
-    full_time: 'Полная занятость',
-  };
-  return map[schedule] || schedule;
+  const key = `schedule.${schedule}`;
+  const translated = translate(key);
+  return translated === key ? schedule : translated;
 }
 
 export function formatWorkFormat(format: string): string {
-  const map: Record<string, string> = {
-    online: 'Онлайн',
-    offline: 'Офлайн',
-    hybrid: 'Гибрид',
-  };
-  return map[format] || format;
+  const key = `workFormat.${format}`;
+  const translated = translate(key);
+  return translated === key ? format : translated;
 }
 
 export function formatResumeStyle(style: string): string {
-  const map: Record<string, string> = {
-    classic: 'Классический',
-    modern: 'Современный',
-    minimal: 'Минималистичный',
-    creative: 'Креативный',
-  };
-  return map[style] || style;
+  const key = `resumeStyles.${style}`;
+  const translated = translate(key);
+  return translated === key ? style : translated;
 }
 
 export function formatStatus(status: string): string {
-  const map: Record<string, string> = {
-    sent: 'Отправлено',
-    viewed: 'Просмотрено',
-    interview: 'Собеседование',
-    accepted: 'Принято',
-    rejected: 'Отклонено',
-  };
-  return map[status] || status;
+  const key = `applications.status.${status}`;
+  const translated = translate(key);
+  return translated === key ? status : translated;
+}
+
+export function formatVacancyWord(count: number): string {
+  const locale = getLocale();
+  if (locale === 'en') return count === 1 ? translate('jobs.vacancyOne') : translate('jobs.vacancyMany');
+  const lastTwo = count % 100;
+  const lastOne = count % 10;
+  if (lastTwo >= 11 && lastTwo <= 19) return translate('jobs.vacancyMany');
+  if (lastOne === 1) return translate('jobs.vacancyOne');
+  if (lastOne >= 2 && lastOne <= 4) return translate('jobs.vacancyFew');
+  return translate('jobs.vacancyMany');
+}
+
+export const JOB_SOURCES: Record<string, { name: string; siteUrl: string }> = {
+  'somon.tj': { name: 'somon.tj', siteUrl: 'https://somon.tj' },
+  remotive: { name: 'Remotive', siteUrl: 'https://remotive.com' },
+  arbeitnow: { name: 'Arbeitnow', siteUrl: 'https://www.arbeitnow.com' },
+  himalayas: { name: 'Himalayas', siteUrl: 'https://himalayas.app' },
+  linkedin: { name: 'LinkedIn', siteUrl: 'https://www.linkedin.com' },
+};
+
+export function getJobSource(source?: string | null): { name: string; siteUrl: string } | null {
+  if (!source || source === 'manual') return null;
+  return JOB_SOURCES[source] || { name: source, siteUrl: '' };
+}
+
+export function getApplicationJobId(job: unknown): number | null {
+  if (typeof job === 'number') return job;
+  if (job && typeof job === 'object' && 'id' in job) {
+    const id = (job as { id: unknown }).id;
+    return typeof id === 'number' ? id : null;
+  }
+  return null;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -123,16 +144,32 @@ export function getErrorMessage(error: unknown): string {
 
     if (err.response?.status) {
       const status = err.response.status;
-      if (status === 401) return 'Необходима авторизация';
-      if (status === 403) return 'Нет доступа';
-      if (status === 404) return 'Не найдено';
-      if (status >= 500) return 'Ошибка сервера. Попробуйте позже.';
+      if (status === 401) return translate('errors.unauthorized');
+      if (status === 403) return translate('errors.forbidden');
+      if (status === 404) return translate('errors.notFound');
+      if (status >= 500) return translate('errors.server');
     }
 
     const data = err.response?.data;
     if (data && typeof data === 'object' && !(data instanceof Blob)) {
       const obj = data as Record<string, unknown>;
-      if ('detail' in obj) return String(obj.detail);
+      if ('detail' in obj) {
+        const detail = obj.detail;
+        if (Array.isArray(detail)) {
+          const parts = detail.map((item) => {
+            if (item && typeof item === 'object' && 'msg' in item) {
+              const loc = Array.isArray((item as { loc?: unknown }).loc)
+                ? (item as { loc: unknown[] }).loc.filter((l) => typeof l === 'string' && l !== 'body').join('.')
+                : '';
+              const msg = String((item as { msg: unknown }).msg);
+              return loc ? `${loc}: ${msg}` : msg;
+            }
+            return String(item);
+          });
+          if (parts.length) return parts.join('\n');
+        }
+        return String(detail);
+      }
       if ('non_field_errors' in obj) return String(Array.isArray(obj.non_field_errors) ? obj.non_field_errors[0] : obj.non_field_errors);
       const firstKey = Object.keys(obj)[0];
       if (firstKey) {
@@ -141,5 +178,5 @@ export function getErrorMessage(error: unknown): string {
       }
     }
   }
-  return 'Произошла ошибка. Попробуйте ещё раз.';
+  return translate('errors.generic');
 }

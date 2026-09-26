@@ -6,13 +6,9 @@ import { Briefcase, Building2, GraduationCap, ArrowRight, Terminal, Binary, Spar
 import api from '@/lib/api';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
+import { useI18n } from '@/i18n/I18nContext';
+import { formatVacancyWord } from '@/lib/utils';
 import type { Category } from '@/types';
-
-const stats = [
-  { icon: Briefcase, value: '1 200+', label: 'Вакансий' },
-  { icon: Building2, value: '500+', label: 'Компаний' },
-  { icon: GraduationCap, value: '0 лет', label: 'Опыта — не проблема' },
-];
 
 const categoryIcons: Record<string, React.ReactNode> = {
   programming: <Code size={20} className="text-text-muted" />,
@@ -26,7 +22,14 @@ const categoryIcons: Record<string, React.ReactNode> = {
 };
 
 export default function HomePage() {
+  const { t } = useI18n();
   const [categories, setCategories] = useState<Category[]>([]);
+
+  const stats = [
+    { icon: Briefcase, value: '1 200+', label: t('home.statVacancies') },
+    { icon: Building2, value: '500+', label: t('home.statCompanies') },
+    { icon: GraduationCap, value: '0', label: t('home.statNoExperience') },
+  ];
 
   useEffect(() => {
     api.get('/categories/').then((res) => {
@@ -53,30 +56,30 @@ export default function HomePage() {
           <div className="max-w-3xl relative z-10">
             <div className="inline-flex items-center gap-2 bg-gradient-to-r from-accent-primary/10 to-accent-cyan/10 border border-accent-primary/20 px-4 py-2 mb-8 rounded-lg">
               <Terminal size={14} className="text-accent-primary" />
-              <span className="text-xs font-mono text-accent-primary uppercase tracking-[3px]">Платформа для студентов</span>
+              <span className="text-xs font-mono text-accent-primary uppercase tracking-[3px]">{t('home.platformBadge')}</span>
             </div>
 
             <h1 className="font-heading text-4xl md:text-5xl lg:text-6xl leading-[1.1] text-text-primary mb-6 font-semibold bg-gradient-to-r from-text-primary via-accent-primary to-accent-cyan bg-clip-text text-transparent">
-              <span className="block">Найди</span>
-              <span className="block">работу мечты</span>
-              <span className="block mt-2">уже сегодня</span>
+              <span className="block">{t('home.heroLine1')}</span>
+              <span className="block">{t('home.heroLine2')}</span>
+              <span className="block mt-2">{t('home.heroLine3')}</span>
             </h1>
 
             <p className="text-sm text-text-muted mb-10 max-w-lg font-mono border-l-2 border-accent-primary pl-4">
-              Вакансии и стажировки для студентов без опыта. Начни карьеру в IT и технологиях прямо сейчас.
+              {t('home.heroDesc')}
             </p>
 
             <div className="flex flex-col sm:flex-row items-start gap-4">
               <Link href="/jobs">
                 <Button size="lg" className="font-mono uppercase tracking-wider bg-gradient-to-r from-accent-primary to-accent-cyan hover:from-accent-primary-hover hover:to-accent-primary shadow-[0_4px_20px_rgba(16,185,129,0.3)]">
                   <Terminal size={16} className="mr-2" />
-                  Смотреть вакансии
+                  {t('home.viewJobs')}
                   <ArrowRight size={16} className="ml-2" />
                 </Button>
               </Link>
               <Link href="/auth/register">
                 <Button variant="secondary" size="lg" className="font-mono uppercase tracking-wider border-border-default text-text-secondary hover:border-border-hover hover:text-text-primary">
-                  Создать профиль
+                  {t('home.createProfile')}
                 </Button>
               </Link>
             </div>
@@ -89,13 +92,13 @@ export default function HomePage() {
               <div className="relative w-full h-full rounded-[50%] border border-border-default/50 overflow-hidden">
                 <img
                   src="https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=600&h=600&fit=crop&crop=center"
-                  alt="Команда специалистов"
+                  alt={t('home.heroImgAlt')}
                   className="w-full h-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-bg-primary/80 via-transparent to-transparent" />
                 <div className="absolute bottom-8 left-8 right-8 text-center">
-                  <h3 className="font-heading text-xl text-text-primary mb-2 drop-shadow-lg">Тысячи вакансий</h3>
-                  <p className="text-text-muted text-sm drop-shadow-lg">Для студентов и выпускников</p>
+                  <h3 className="font-heading text-xl text-text-primary mb-2 drop-shadow-lg">{t('home.thousandsVacancies')}</h3>
+                  <p className="text-text-muted text-sm drop-shadow-lg">{t('home.forStudents')}</p>
                 </div>
               </div>
               <div className="absolute -bottom-6 -right-6 w-24 h-24 bg-gradient-to-br from-accent-cyan to-accent-primary rounded-xl opacity-50 blur-xl" />
@@ -123,12 +126,12 @@ export default function HomePage() {
           <div className="text-center mb-16">
             <div className="inline-flex items-center gap-2 bg-accent-primary/10 border border-accent-primary/20 px-4 py-2 mb-6 rounded-lg">
               <Sparkles size={14} className="text-accent-primary" />
-              <span className="text-xs font-mono text-accent-primary uppercase tracking-[3px]">Почему CareerHub?</span>
+              <span className="text-xs font-mono text-accent-primary uppercase tracking-[3px]">{t('home.whyBadge')}</span>
             </div>
             <h2 className="font-heading text-3xl md:text-4xl text-text-primary mb-4 font-semibold">
-              Всё для успешного <span className="text-accent-primary">старта карьеры</span>
+              {t('home.whyTitle')} <span className="text-accent-primary">{t('home.whyTitleAccent')}</span>
             </h2>
-            <p className="text-text-muted max-w-2xl mx-auto">Инструменты, которые помогут найти идеальную работу быстрее</p>
+            <p className="text-text-muted max-w-2xl mx-auto">{t('home.whyDesc')}</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -137,8 +140,8 @@ export default function HomePage() {
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-accent-primary to-accent-cyan flex items-center justify-center mb-4 relative z-10 group-hover:scale-110 transition-transform duration-300">
                 <Bot size={24} className="text-white" />
               </div>
-              <h3 className="font-heading text-lg text-text-primary mb-2 relative z-10">AI Карьерный консультант</h3>
-              <p className="text-text-muted text-sm relative z-10">Персональные рекомендации, помощь с резюме и подготовка к собеседованиям</p>
+              <h3 className="font-heading text-lg text-text-primary mb-2 relative z-10">{t('home.feature1Title')}</h3>
+              <p className="text-text-muted text-sm relative z-10">{t('home.feature1Desc')}</p>
             </Card>
 
             <Card className="p-6 border-border-default hover:border-border-hover hover:bg-surface-hover transition-all duration-300 group relative overflow-hidden">
@@ -146,8 +149,8 @@ export default function HomePage() {
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-accent-cyan to-accent-primary flex items-center justify-center mb-4 relative z-10 group-hover:scale-110 transition-transform duration-300">
                 <Target size={24} className="text-white" />
               </div>
-              <h3 className="font-heading text-lg text-text-primary mb-2 relative z-10">Умный поиск вакансий</h3>
-              <p className="text-text-muted text-sm relative z-10">Фильтры по опыту, графику, формату работы и зарплате. Парсинг с somon.tj</p>
+              <h3 className="font-heading text-lg text-text-primary mb-2 relative z-10">{t('home.feature2Title')}</h3>
+              <p className="text-text-muted text-sm relative z-10">{t('home.feature2Desc')}</p>
             </Card>
 
             <Card className="p-6 border-border-default hover:border-border-hover hover:bg-surface-hover transition-all duration-300 group relative overflow-hidden">
@@ -155,8 +158,8 @@ export default function HomePage() {
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-accent-primary to-accent-cyan flex items-center justify-center mb-4 relative z-10 group-hover:scale-110 transition-transform duration-300">
                 <TrendingUp size={24} className="text-white" />
               </div>
-              <h3 className="font-heading text-lg text-text-primary mb-2 relative z-10">Прямой чат с работодателями</h3>
-              <p className="text-text-muted text-sm relative z-10">Общайтесь с HR напрямую после отклика. WebSocket для реального времени</p>
+              <h3 className="font-heading text-lg text-text-primary mb-2 relative z-10">{t('home.feature3Title')}</h3>
+              <p className="text-text-muted text-sm relative z-10">{t('home.feature3Desc')}</p>
             </Card>
           </div>
         </div>
@@ -169,12 +172,12 @@ export default function HomePage() {
             <div className="flex items-center gap-3 mb-4">
               <div className="w-2 h-2 bg-accent-primary rounded-full" />
               <h2 className="font-heading text-xl md:text-2xl text-text-primary font-semibold">
-                Категории
+                {t('home.categoriesTitle')}
               </h2>
               <div className="flex-1 h-px bg-border-default" />
               <span className="text-xs font-mono text-text-subtle">[ {categories.length} ]</span>
             </div>
-            <p className="text-xs text-text-muted font-mono uppercase tracking-[3px] ml-0">Найди работу в своей области</p>
+            <p className="text-xs text-text-muted font-mono uppercase tracking-[3px] ml-0">{t('home.categoriesSubtitle')}</p>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -188,7 +191,7 @@ export default function HomePage() {
                     <div className="min-w-0">
                       <div className="text-xs font-medium text-text-primary truncate">{cat.name}</div>
                       <div className="text-[11px] text-text-muted mt-0.5">
-                        {cat.jobs_count ?? 0} {getVacancyWord(cat.jobs_count ?? 0)}
+                        {t('jobs.foundCount', { count: cat.jobs_count ?? 0, word: formatVacancyWord(cat.jobs_count ?? 0) })}
                       </div>
                     </div>
                   </div>
@@ -205,22 +208,22 @@ export default function HomePage() {
           <div className="absolute inset-0 -z-10 bg-gradient-to-r from-accent-primary/10 via-transparent to-accent-cyan/10 rounded-3xl blur-3xl mx-4" />
           
           <div className="inline-flex items-center gap-2 bg-gradient-to-r from-red-500/10 to-accent-primary/10 border border-red-500/20 px-4 py-2 mb-6 rounded-lg">
-            <span className="text-xs font-mono text-red-500 uppercase tracking-[3px]">Готов начать?</span>
+            <span className="text-xs font-mono text-red-500 uppercase tracking-[3px]">{t('home.ctaBadge')}</span>
           </div>
 
           <h2 className="font-heading text-2xl md:text-3xl lg:text-4xl text-text-primary mb-4 font-semibold bg-gradient-to-r from-text-primary via-accent-primary to-accent-cyan bg-clip-text text-transparent">
-            <span className="block">Готов</span>
-            <span className="block">начать?</span>
+            <span className="block">{t('home.ctaLine1')}</span>
+            <span className="block">{t('home.ctaLine2')}</span>
           </h2>
 
           <p className="text-xs text-text-muted font-mono mb-8 max-w-md mx-auto uppercase tracking-wider border-l-2 border-accent-primary pl-4">
-            Зарегистрируйся сейчас и получи доступ к тысячам вакансий для студентов
+            {t('home.ctaDesc')}
           </p>
 
           <Link href="/auth/register">
             <Button size="lg" className="font-mono uppercase tracking-wider bg-gradient-to-r from-accent-primary to-accent-cyan hover:from-accent-primary-hover hover:to-accent-primary shadow-[0_4px_20px_rgba(16,185,129,0.3)]">
               <Binary size={16} className="mr-2" />
-              Зарегистрироваться бесплатно
+              {t('home.ctaButton')}
               <ArrowRight size={16} className="ml-2" />
             </Button>
           </Link>
@@ -246,13 +249,4 @@ export default function HomePage() {
       </div>
     </div>
   );
-}
-
-function getVacancyWord(count: number): string {
-  const lastTwo = count % 100;
-  const lastOne = count % 10;
-  if (lastTwo >= 11 && lastTwo <= 19) return 'вакансий';
-  if (lastOne === 1) return 'вакансия';
-  if (lastOne >= 2 && lastOne <= 4) return 'вакансии';
-  return 'вакансий';
 }

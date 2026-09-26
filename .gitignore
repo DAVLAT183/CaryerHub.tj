@@ -48,3 +48,6 @@ npm-debug.log*
 
 # Byte-compiled
 **/__pycache__/
+
+# Uploaded files (avatars)
+Backend/media/

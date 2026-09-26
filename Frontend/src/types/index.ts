@@ -8,6 +8,7 @@ export interface User {
   phone: string;
   avatar: string | null;
   location: string;
+  is_email_verified?: boolean;
 }
 
 export interface StudentProfile {
@@ -23,7 +24,7 @@ export interface StudentProfile {
 
 export interface EmployerProfile {
   id: number;
-  user: User;
+  user: User | null;
   company_name: string;
   description: string;
   website: string;
@@ -86,10 +87,10 @@ export interface Job {
 
 export interface Application {
   id: number;
-  job: number;
+  job: number | { id: number };
   job_title: string;
   job_employer_name: string;
-  resume: number;
+  resume: number | { id: number };
   student_name: string;
   status: 'sent' | 'viewed' | 'interview' | 'accepted' | 'rejected';
   cover_letter: string;

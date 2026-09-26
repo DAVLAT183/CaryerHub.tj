@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import api, { saveTokens, removeTokens } from '@/lib/api';
+import api, { saveTokens, removeTokens, setEmailVerified } from '@/lib/api';
 import type { User } from '@/types';
 
 interface AuthContextType {
@@ -30,6 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const res = await api.get('/users/me/');
       setUser(res.data);
+      setEmailVerified(!!res.data.is_email_verified);
     } catch (err) {
       const axiosError = err as { response?: { status?: number } };
       if (axiosError.response?.status === 401) {
@@ -46,13 +47,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchUser]);
 
   const login = async (username: string, password: string) => {
-    const res = await api.post('/token/', { username, password });
+    const res = await api.post('/auth/login/', { username, password });
     saveTokens(res.data.access, res.data.refresh);
+    setEmailVerified(!!res.data.user?.is_email_verified);
     await fetchUser();
   };
 
-  const register = async (data: { username: string; email: string; password: string; role: string; phone?: string }) => {
-    await api.post('/register/', data);
+  const register = async (data: { username: string; email: string; password: string; role: string; phone?: string; companyName?: string }) => {
+    await api.post('/auth/register/', {
+      username: data.username,
+      email: data.email,
+      password: data.password,
+      role: data.role,
+      phone: data.phone,
+      company_name: data.companyName,
+    });
     await login(data.username, data.password);
   };
 
